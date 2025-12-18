@@ -1,6 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { AppSettings, Participant, AgendaItem, CardDesign } from "../types";
 
+export const getAIProviderLabel = (settings: AppSettings): string => {
+  switch (settings.aiProvider) {
+    case 'ollama':
+      return `Ollama (${settings.ollamaModel || 'default'})`;
+    case 'siliconflow':
+      return `SiliconFlow (DeepSeek)`;
+    case 'gemini':
+    default:
+      return `Gemini (Flash)`;
+  }
+};
+
 // The new core function to handle different AI providers
 const generateContentWithProvider = async (
   settings: AppSettings,
@@ -229,6 +241,7 @@ export const generateChatResponse = async (settings: AppSettings, userQuery: str
         return reply || "抱歉，我现在无法回答。请检查网络或Key配置。";
     } catch (error: any) {
         console.error("Chat Response Error:", error);
-        return `连接 AI 服务失败: ${error.message}. 请确保您已在设置中为选定的服务商配置了有效的 URL 或 API Key。`;
+        const providerLabel = getAIProviderLabel(settings);
+        return `连接 ${providerLabel} 服务失败: ${error.message}. 请确保您已在设置中为选定的服务商配置了有效的 URL 或 API Key。`;
     }
 };

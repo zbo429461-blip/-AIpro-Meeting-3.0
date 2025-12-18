@@ -491,22 +491,15 @@ const App: React.FC = () => {
       });
   };
 
-  const deleteMeeting = (id: string, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.nativeEvent.stopImmediatePropagation();
-      
-      if (window.confirm('确定要删除这个会议吗？数据将无法恢复。')) {
-          setMeetings(prevMeetings => {
-              const newMeetings = prevMeetings.filter(m => m.id !== id);
-              return newMeetings;
-          });
-          
-          if (currentMeetingId === id) {
-              setCurrentMeetingId(null);
-              setCurrentView(View.MEETING_LIST);
-          }
+  const deleteMeeting = (id: string) => {
+    if (window.confirm('确定要删除这个会议吗？数据将无法恢复。')) {
+      setMeetings(prevMeetings => prevMeetings.filter(m => m.id !== id));
+
+      if (currentMeetingId === id) {
+        setCurrentMeetingId(null);
+        setCurrentView(View.MEETING_LIST);
       }
+    }
   };
 
   const selectMeeting = (id: string) => {
@@ -643,7 +636,10 @@ const App: React.FC = () => {
                               >
                                   {/* Delete Button */}
                                   <button 
-                                      onClick={(e) => deleteMeeting(meeting.id, e)}
+                                      onClick={(e) => {
+                                          e.stopPropagation(); // Stop event from bubbling to parent divs
+                                          deleteMeeting(meeting.id);
+                                      }}
                                       className="absolute -top-3 -right-3 p-2 bg-white text-gray-400 hover:text-red-600 rounded-full shadow-md border border-gray-200 z-50 opacity-0 group-hover:opacity-100 transition-opacity"
                                       title="删除会议"
                                   >

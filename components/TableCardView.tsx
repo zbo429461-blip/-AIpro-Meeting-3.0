@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Participant, CardDesign, AppSettings } from '../types';
 import { Printer, Settings2, Image as ImageIcon, Sparkles, Upload, RotateCw, Palette, Type, Move, LayoutTemplate, PenTool, FileText, UserSquare2, Download, Package } from 'lucide-react';
-import { generateCardDesign } from '../services/aiService';
+import { generateCardDesign, getAIProviderLabel } from '../services/aiService';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import saveAs from 'file-saver';
@@ -46,6 +46,8 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
   const dragTargetRef = useRef<'name' | 'unit' | 'logo' | null>(null);
   const dragStartPos = useRef<{x: number, y: number} | null>(null);
   const initialDesignValues = useRef<{nameY: number, unitY: number, logoX: number, logoY: number} | null>(null);
+
+  const aiProviderLabel = getAIProviderLabel(settings || {} as AppSettings);
 
   const handlePrint = () => {
     window.print();
@@ -110,7 +112,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
               fontFamily: result.fontFamily === 'SimHei' ? 'font-sans-sc' : 'font-serif-sc',
               bgType: 'solid'
           }));
-      } catch (e) { alert("设计生成失败"); } 
+      } catch (e) { alert(`使用 ${aiProviderLabel} 生成设计失败。`); } 
       finally { setIsAiLoading(false); }
   };
 
@@ -368,9 +370,16 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                     </>
                 )}
 
-                <button onClick={handleAiDesign} disabled={isAiLoading} className="w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded text-sm flex justify-center items-center gap-2">
-                     {isAiLoading ? <RotateCw className="animate-spin" size={14}/> : <Sparkles size={14}/>} AI 配色建议
-                </button>
+                <div className="text-center">
+                    <button onClick={handleAiDesign} disabled={isAiLoading} className="w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded text-sm flex justify-center items-center gap-2">
+                         {isAiLoading ? <RotateCw className="animate-spin" size={14}/> : <Sparkles size={14}/>} AI 配色建议
+                    </button>
+                    {settings && (
+                        <p className="text-xs text-gray-400 mt-2 font-mono">
+                            由 {aiProviderLabel} 驱动
+                        </p>
+                    )}
+                </div>
            </div>
        </div>
 

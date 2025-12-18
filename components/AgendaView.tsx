@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AgendaItem, AppSettings, MeetingBasicInfo, Participant } from '../types';
 import { formatNameForAgenda } from '../utils';
-import { generateAgenda } from '../services/aiService';
+import { generateAgenda, getAIProviderLabel } from '../services/aiService';
 import { Wand2, Calendar, Clock, MapPin, User, Loader2, PlayCircle, Download, FileText, Type, AlignLeft, Eye, Edit2 } from 'lucide-react';
 
 interface AgendaViewProps {
@@ -16,6 +16,7 @@ interface AgendaViewProps {
 export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, settings, participants, meetingInfo, setMeetingInfo }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const aiProviderLabel = getAIProviderLabel(settings);
   
   // Styling state for export & preview
   const [exportFont, setExportFont] = useState('SimSun');
@@ -31,7 +32,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
         const newItems = await generateAgenda(meetingInfo.topic, meetingInfo.date, settings);
         setAgenda(newItems);
     } catch (e) {
-        alert("生成失败，请检查设置中的Key。");
+        alert(`使用 ${aiProviderLabel} 生成失败，请检查Key或网络。`);
     } finally {
         setIsGenerating(false);
     }
@@ -190,7 +191,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
                         </div>
                     </div>
 
-                    <div className="pt-4 border-t border-gray-100">
+                    <div className="pt-4 border-t border-gray-100 text-center">
                          <button 
                             onClick={handleAiGenerate}
                             disabled={isGenerating}
@@ -199,6 +200,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
                             {isGenerating ? <Loader2 className="animate-spin" size={16}/> : <Wand2 size={16} />}
                             AI 辅助生成议程
                         </button>
+                         <p className="text-xs text-gray-400 mt-2 font-mono">
+                            由 {aiProviderLabel} 驱动
+                        </p>
                     </div>
                  </div>
             </div>

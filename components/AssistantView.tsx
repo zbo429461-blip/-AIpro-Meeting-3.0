@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, ChatMessage, MeetingBasicInfo, MeetingFile, Participant, AgendaItem } from '../types';
-import { generateChatResponse } from '../services/aiService';
+import { generateChatResponse, getAIProviderLabel } from '../services/aiService';
 import { Send, Bot, User, Trash2, Loader2, Sparkles, FileEdit, CheckSquare, Mic2, Mail, FileText, Megaphone, BookOpen, Save, X, MessageSquare } from 'lucide-react';
 
 interface AssistantViewProps {
@@ -27,6 +27,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
   const [localKnowledge, setLocalKnowledge] = useState(settings.knowledgeBase || '');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const aiProviderLabel = getAIProviderLabel(settings);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -137,7 +138,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
                     <Sparkles className="text-indigo-600" size={24}/>
                     智能会议助手
                 </h2>
-                <p className="text-sm text-gray-500">{meetingInfo?.topic || "Conference AI Assistant"}</p>
+                <p className="text-sm text-gray-500">
+                    {meetingInfo?.topic || "Conference AI Assistant"}
+                     <span className="font-mono text-xs ml-2 px-1.5 py-0.5 bg-slate-100 rounded border border-gray-200">
+                        {aiProviderLabel}
+                    </span>
+                </p>
             </div>
             <div className="flex gap-2">
                 <button 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Participant, AppSettings } from '../types';
 import { formatNameForForm } from '../utils';
-import { translateParticipantInfo, parseParticipantsFromImage, parseParticipantsFromText } from '../services/aiService';
+import { translateParticipantInfo, parseParticipantsFromImage, parseParticipantsFromText, getAIProviderLabel } from '../services/aiService';
 import { read, utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
 import { Search, Plus, Download, Upload, Trash2, Globe, Sparkles, X, Check, Users, FileSpreadsheet, History, Save, Camera, FileType } from 'lucide-react';
 
@@ -17,6 +17,8 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
   const [showImport, setShowImport] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [textToImport, setTextToImport] = useState(''); // State for text import
+
+  const aiProviderLabel = getAIProviderLabel(settings);
 
   // Load history on mount
   useEffect(() => {
@@ -110,7 +112,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
            saveToLibrary({ ...p, ...result }); 
         }
     } catch (e) {
-        alert("翻译失败，请检查设置中的API Key。");
+        alert(`使用 ${aiProviderLabel} 翻译失败，请检查设置。`);
     } finally {
         setLoadingMap(prev => ({ ...prev, [id]: false }));
     }
@@ -181,7 +183,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
             try {
                 const parsedItems = await parseParticipantsFromImage(base64Data, settings);
                 processImportedItems(parsedItems, 'ocr');
-            } catch (err) { alert("图片识别失败"); } 
+            } catch (err) { alert(`使用 ${aiProviderLabel} 图片识别失败`); } 
             finally { setIsImporting(false); }
         };
     } catch (e) { setIsImporting(false); }
@@ -195,7 +197,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
           const parsedItems = await parseParticipantsFromText(textToImport, settings);
           processImportedItems(parsedItems, 'text');
           setTextToImport('');
-      } catch (e) { alert("文本识别失败"); }
+      } catch (e) { alert(`使用 ${aiProviderLabel} 文本识别失败`); }
       finally { setIsImporting(false); }
   };
 
@@ -226,6 +228,10 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
                     <p className="text-gray-500 text-sm">人员库记录: {historyLibrary.length} 条</p>
                     <span className="text-gray-300">|</span>
                     <p className="text-gray-500 text-sm">已自动应用“两字姓名加空格”规则</p>
+                     <span className="text-gray-300">|</span>
+                    <span className="text-xs text-gray-400 font-mono px-2 py-0.5 bg-white border border-gray-200 rounded" title={`AI 功能由 ${aiProviderLabel} 提供支持`}>
+                        AI: {aiProviderLabel}
+                    </span>
                 </div>
             </div>
             
@@ -330,6 +336,9 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
                              智能处理中...
                          </div>
                     )}
+                    <div className="text-center text-xs text-gray-400 mt-2 font-mono">
+                        图片和文本识别由 {aiProviderLabel} 提供支持
+                    </div>
                 </div>
             </div>
         )}
@@ -437,7 +446,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
             </div>
             <div className="bg-gray-50 px-4 py-2 border-t border-gray-300 text-xs text-gray-500 flex justify-between">
                 <span>共 {participants.length} 人</span>
-                <span>AI Meeting v3.0</span>
+                <span>AI Meeting v3.1</span>
             </div>
         </div>
     </div>
