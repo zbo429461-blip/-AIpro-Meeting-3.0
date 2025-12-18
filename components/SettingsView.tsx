@@ -36,17 +36,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                    throw new Error("Status: " + res.status);
                }
           } else if (formData.aiProvider === 'siliconflow') {
-               // SiliconFlow User Info Endpoint
-               const res = await fetch('https://api.siliconflow.cn/v1/user/info', {
+               // Use the /v1/models endpoint for a more reliable, standard test
+               const res = await fetch('https://api.siliconflow.cn/v1/models', {
                    headers: {
                        'Authorization': `Bearer ${formData.siliconFlowKey}`
                    }
                });
                const data = await res.json();
-               if (res.ok && data.code === 200) {
-                   setTestResult({ success: true, msg: `连接成功！用户: ${data.data.name}` });
+               if (res.ok) {
+                   // The API call was successful, the key is valid.
+                   setTestResult({ success: true, msg: `连接成功！SiliconFlow Key 有效。` });
                } else {
-                   throw new Error(data.message || "Invalid Key");
+                   // Extract a more detailed error message if available
+                   const errorMessage = data.error?.message || data.message || "Invalid Key or Network Error";
+                   throw new Error(errorMessage);
                }
           } else {
               setTestResult({ success: true, msg: "Gemini 需通过生成内容测试。" });

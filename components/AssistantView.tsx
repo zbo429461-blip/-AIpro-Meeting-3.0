@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, ChatMessage, MeetingBasicInfo, MeetingFile, Participant, AgendaItem } from '../types';
-import { GoogleGenAI } from "@google/genai";
+import { generateChatResponse } from '../services/aiService';
 import { Send, Bot, User, Trash2, Loader2, Sparkles, FileEdit, CheckSquare, Mic2, Mail, FileText, Megaphone, BookOpen, Save, X, MessageSquare } from 'lucide-react';
 
 interface AssistantViewProps {
@@ -83,75 +83,41 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
     setInput('');
     setIsLoading(true);
 
-    try {
-        const ai = new GoogleGenAI({ apiKey: settings.geminiKey || process.env.API_KEY || '' });
-        const model = 'gemini-2.5-flash';
-        
-        let systemInstruction = `You are an expert academic conference organizer assistant.`;
-        
-        if (settings.knowledgeBase) {
-             systemInstruction += `\n\nUSER PERSONAL STYLE / KNOWLEDGE BASE:\n${settings.knowledgeBase}\n\nPlease strictly adhere to the user's style preference and vocabulary defined above.`;
-        }
-
-        if (meetingInfo) {
-            systemInstruction += `\n\nCURRENT MEETING CONTEXT: 
-            - Topic: "${meetingInfo.topic}"
-            - Date: ${meetingInfo.date}
-            - Location: ${meetingInfo.location || "TBD"}`;
-        }
-        
-        let userQuery = textToSend;
-
-        // NEW: Context injection for meeting summary
-        if (textToSend.includes("会议纪要") && !textToSend.includes("模板")) {
-            let summaryContext = `\n\n--- CONTEXT FOR MEETING SUMMARY ---\n`;
-            if (participants.length > 0) {
-                summaryContext += `Participants: ${participants.map(p => p.nameCN).join(', ')}\n`;
-            }
-            if (agenda.length > 0) {
-                summaryContext += `Agenda:\n${agenda.map(a => `- ${a.time} ${a.title}`).join('\n')}\n`;
-            }
-            if (files.length > 0) {
-                summaryContext += `Reference Files: ${files.map(f => f.name).join(', ')}\n`;
-            }
-            const chatHistory = messages.slice(1, -1).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-            if (chatHistory) {
-                summaryContext += `Discussion Log:\n${chatHistory}\n`;
-            }
-            
-            userQuery = `${textToSend}\n\nPlease use the context from the system instruction AND the following additional details to generate the summary:${summaryContext}`;
-        }
-
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: userQuery,
-            config: {
-                systemInstruction: systemInstruction,
-            },
-        });
-
-        const reply = response.text || "抱歉，我现在无法回答。请检查网络或Key配置。";
-        
-        const aiMsg: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: reply,
-            timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, aiMsg]);
-
-    } catch (error) {
-        console.error(error);
-        const errorMsg: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: "连接 AI 服务失败。请确保您已在设置中配置了有效的 API Key。",
-            timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, errorMsg]);
-    } finally {
-        setIsLoading(false);
+    // Build context for the AI
+    let systemInstruction = `You are an expert academic conference organizer assistant.`;
+    if (settings.knowledgeBase) {
+        systemInstruction += `\n\nUSER PERSONAL STYLE / KNOWLEDGE BASE:\n${settings.knowledgeBase}\n\nPlease strictly adhere to the user's style preference and vocabulary defined above.`;
     }
+    if (meetingInfo) {
+        systemInstruction += `\n\nCURRENT MEETING CONTEXT: 
+        - Topic: "${meetingInfo.topic}"
+        - Date: ${meetingInfo.date}
+        - Location: ${meetingInfo.location || "TBD"}`;
+    }
+    
+    let userQuery = textToSend;
+    // Context injection for meeting summary
+    if (textToSend.includes("会议纪要") && !textToSend.includes("模板")) {
+        let summaryContext = `\n\n--- CONTEXT FOR MEETING SUMMARY ---\n`;
+        if (participants.length > 0) summaryContext += `Participants: ${participants.map(p => p.nameCN).join(', ')}\n`;
+        if (agenda.length > 0) summaryContext += `Agenda:\n${agenda.map(a => `- ${a.time} ${a.title}`).join('\n')}\n`;
+        if (files.length > 0) summaryContext += `Reference Files: ${files.map(f => f.name).join(', ')}\n`;
+        const chatHistory = messages.slice(1, -1).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+        if (chatHistory) summaryContext += `Discussion Log:\n${chatHistory}\n`;
+        userQuery = `${textToSend}\n\nPlease use the context from the system instruction AND the following additional details to generate the summary:${summaryContext}`;
+    }
+
+    // Call the new centralized service
+    const reply = await generateChatResponse(settings, userQuery, systemInstruction);
+
+    const aiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: reply,
+        timestamp: Date.now()
+    };
+    setMessages(prev => [...prev, aiMsg]);
+    setIsLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
