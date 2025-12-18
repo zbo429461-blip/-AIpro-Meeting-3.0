@@ -201,6 +201,7 @@ const App: React.FC = () => {
     ollamaUrl: 'http://localhost:11434',
     ollamaModel: 'llama3',
     siliconFlowKey: '',
+    siliconFlowModel: 'alibaba/qwen2-72b-instruct',
     knowledgeBase: ''
   });
 

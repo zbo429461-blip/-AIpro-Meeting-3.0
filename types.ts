@@ -84,6 +84,7 @@ export interface AppSettings {
   ollamaUrl: string;
   ollamaModel: string;
   siliconFlowKey: string;
+  siliconFlowModel: string;
   knowledgeBase?: string; // New: Personal style/knowledge base
 }
 

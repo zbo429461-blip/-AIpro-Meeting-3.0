@@ -24,8 +24,8 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
     fontFamily: 'font-serif-sc',
     fontSizeScale: 1.0,
     logo: '',
-    logoX: 10,
-    logoY: 10,
+    logoX: 85,
+    logoY: 85,
     logoSize: 100,
     nameY: 0,
     unitY: 0,
@@ -40,6 +40,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   
+  // Fix: Corrected typo from HTMLDivDivElement to HTMLDivElement.
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   // Drag State - Use Refs to avoid stale closures in event listeners
@@ -184,8 +185,11 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
             const percentDeltaX = deltaX / 8; 
             const percentDeltaY = deltaY / 11;
             
+            const newY = initialDesignValues.current!.logoY + percentDeltaY;
+            
             next.logoX = Math.min(100, Math.max(0, initialDesignValues.current!.logoX + percentDeltaX));
-            next.logoY = Math.min(100, Math.max(0, initialDesignValues.current!.logoY + percentDeltaY));
+            // Constrain Y to be in the bottom half (50% to 100%)
+            next.logoY = Math.min(100, Math.max(50, newY));
         }
         return next;
     });
@@ -361,7 +365,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                                  <input type="range" min="0" max="100" value={design.logoX} onChange={e => setDesign({...design, logoX: Number(e.target.value)})} className="w-full"/>
                                  
                                  <div className="flex justify-between text-xs"><span>Y 轴</span><span>{design.logoY.toFixed(1)}%</span></div>
-                                 <input type="range" min="0" max="100" value={design.logoY} onChange={e => setDesign({...design, logoY: Number(e.target.value)})} className="w-full"/>
+                                 <input type="range" min="50" max="100" value={design.logoY} onChange={e => setDesign({...design, logoY: Number(e.target.value)})} className="w-full"/>
                                  
                                  <div className="flex justify-between text-xs"><span>大小</span><span>{design.logoSize}px</span></div>
                                  <input type="range" min="20" max="300" value={design.logoSize} onChange={e => setDesign({...design, logoSize: Number(e.target.value)})} className="w-full"/>
@@ -474,28 +478,27 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                             className={`card-container w-[210mm] h-[297mm] shadow-2xl relative flex flex-col print:shadow-none print:mb-0 print:break-after-page overflow-hidden ${design.fontFamily} ${containerClass}`}
                         >
                             
-                            {/* Moveable Logo (Draggable in bottom half only technically, but here we absolute position it over everything. We'll enable drag on it) */}
-                            {design.logo && (
-                                <div 
-                                    className={`absolute z-20 opacity-90 ${logoCursor}`}
-                                    onMouseDown={(e) => handleMouseDown(e, 'logo')}
-                                    style={{ 
-                                        left: `${design.logoX}%`, 
-                                        top: `${design.logoY}%`, 
-                                        width: `${design.logoSize}px` 
-                                    }}
-                                >
-                                    <img src={design.logo} alt="Logo" className="w-full object-contain pointer-events-none" />
-                                </div>
-                            )}
-
                             {/* Decorative Line Top (Upside Down part) */}
                             {design.showLine && (
                                 <div className="absolute top-[48%] left-10 right-10 h-1 z-10" style={{ backgroundColor: design.lineColor }}></div>
                             )}
 
-                            {/* Top Half (Upside down) - No Dragging here to avoid confusion with inversion */}
+                            {/* Top Half (Upside down) */}
                             <div className="h-1/2 flex flex-col justify-center items-center p-12 border-b border-white/20 border-dashed print:border-none transform rotate-180 relative opacity-90 pointer-events-none">
+                                {/* Mirrored Logo */}
+                                {design.logo && (
+                                    <div
+                                        className="absolute z-10 opacity-90"
+                                        style={{
+                                            left: `${design.logoX}%`,
+                                            top: `${design.logoY - 50}%`,
+                                            width: `${design.logoSize}px`,
+                                            display: design.logoY < 50 ? 'none' : 'block',
+                                        }}
+                                    >
+                                        <img src={design.logo} alt="Logo" className="w-full object-contain pointer-events-none" />
+                                    </div>
+                                )}
                                 <h1 style={nameStyle} className={`leading-tight font-bold whitespace-nowrap text-center ${textClass}`}>
                                     {p.nameCN}
                                 </h1>
@@ -513,6 +516,21 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
 
                             {/* Bottom Half (Interactive) */}
                             <div className="h-1/2 flex flex-col justify-center items-center p-12 relative">
+                                {/* Draggable Logo */}
+                                {design.logo && (
+                                    <div
+                                        className={`absolute z-20 opacity-90 ${logoCursor}`}
+                                        onMouseDown={(e) => handleMouseDown(e, 'logo')}
+                                        style={{
+                                            left: `${design.logoX}%`,
+                                            top: `${design.logoY - 50}%`,
+                                            width: `${design.logoSize}px`,
+                                            display: design.logoY < 50 ? 'none' : 'block',
+                                        }}
+                                    >
+                                        <img src={design.logo} alt="Logo" className="w-full object-contain pointer-events-none" />
+                                    </div>
+                                )}
                                 <h1 
                                     style={nameStyle} 
                                     className={`leading-tight font-bold whitespace-nowrap text-center ${textClass} ${nameCursor} transition-opacity`} 

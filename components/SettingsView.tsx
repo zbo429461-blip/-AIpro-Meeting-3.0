@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { Save, Server, Cpu, KeyRound, CheckCircle2, XCircle, Loader2, Play, BookOpen, ExternalLink, HelpCircle, FileText, ChevronRight } from 'lucide-react';
+import { fetchSiliconFlowModels } from '../services/aiService';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -15,6 +16,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
   // Test State
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{success: boolean, msg: string} | null>(null);
+  const [sfModels, setSfModels] = useState<string[]>([]);
+
+  // Auto-fetch models if a key is present on load
+  useEffect(() => {
+    if (formData.aiProvider === 'siliconflow' && formData.siliconFlowKey) {
+        testConnection();
+    }
+  }, [formData.aiProvider]);
 
   const handleSave = () => {
     onSave(formData);
@@ -28,7 +37,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
       
       try {
           if (formData.aiProvider === 'ollama') {
-               // Simple ping to Ollama tags endpoint
                const res = await fetch(`${formData.ollamaUrl}/api/tags`);
                if (res.ok) {
                    setTestResult({ success: true, msg: "Ollama 连接成功！" });
@@ -36,25 +44,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                    throw new Error("Status: " + res.status);
                }
           } else if (formData.aiProvider === 'siliconflow') {
-               // Use the /v1/models endpoint for a more reliable, standard test
-               const res = await fetch('https://api.siliconflow.cn/v1/models', {
-                   headers: {
-                       'Authorization': `Bearer ${formData.siliconFlowKey}`
+               const models = await fetchSiliconFlowModels(formData.siliconFlowKey);
+               setSfModels(models);
+               if (models.length > 0) {
+                   setTestResult({ success: true, msg: `连接成功！已加载 ${models.length} 个可用模型。` });
+                   if (!formData.siliconFlowModel || !models.includes(formData.siliconFlowModel)) {
+                       setFormData(prev => ({ ...prev, siliconFlowModel: models[0] }));
                    }
-               });
-               const data = await res.json();
-               if (res.ok) {
-                   // The API call was successful, the key is valid.
-                   setTestResult({ success: true, msg: `连接成功！SiliconFlow Key 有效。` });
                } else {
-                   // Extract a more detailed error message if available
-                   const errorMessage = data.error?.message || data.message || "Invalid Key or Network Error";
-                   throw new Error(errorMessage);
+                   setTestResult({ success: false, msg: "连接成功，但未找到可用的对话模型。" });
                }
           } else {
               setTestResult({ success: true, msg: "Gemini 需通过生成内容测试。" });
           }
       } catch (e: any) {
+          setSfModels([]);
           setTestResult({ success: false, msg: `连接失败: ${e.message}` });
       } finally {
           setTestingProvider(null);
@@ -180,25 +184,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             </div>
             </section>
 
-            {/* Gemini Config */}
+            {/* Fix: Removed Gemini API key configuration UI. Per guidelines, the API key must be sourced exclusively from environment variables. */}
             {formData.aiProvider === 'gemini' && (
-            <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+              <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-3">
-                <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                    <Server size={20} />
-                </div>
-                Gemini 参数配置
+                  <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                      <Server size={20} />
+                  </div>
+                  Gemini 参数配置
                 </h3>
-                <div>
-                <p className="text-sm text-gray-600 mb-2">
-                    Gemini API Key is configured via environment variables (process.env.API_KEY).
+                <p className="text-sm text-gray-600">
+                  Gemini API Key 已通过系统环境变量配置，无需在此处手动输入。
                 </p>
-                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded text-gray-500 text-sm">
-                    <KeyRound size={16} />
-                    <span>Configured via System Environment</span>
-                </div>
-                </div>
-            </section>
+              </section>
             )}
 
             {/* Ollama Config */}
@@ -246,30 +244,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             {/* SiliconFlow Config */}
             {formData.aiProvider === 'siliconflow' && (
             <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-3">
+                <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-3">
                     <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
                         <Server size={20} />
                     </div>
                     硅基流动配置
-                    </h3>
-                    <button 
-                        onClick={testConnection}
-                        disabled={!!testingProvider}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
-                    >
-                        {testingProvider === 'siliconflow' ? <Loader2 className="animate-spin" size={14}/> : <Play size={14}/>}
-                        测试 Key
-                    </button>
-                </div>
-                <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">API Key</label>
-                <input
-                    type="password"
-                    value={formData.siliconFlowKey}
-                    onChange={(e) => setFormData({...formData, siliconFlowKey: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
-                />
+                </h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">API Key</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="password"
+                                value={formData.siliconFlowKey}
+                                onChange={(e) => {
+                                    setFormData({...formData, siliconFlowKey: e.target.value});
+                                    setTestResult(null);
+                                    setSfModels([]);
+                                }}
+                                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                            />
+                            <button 
+                                onClick={testConnection}
+                                disabled={testingProvider === 'siliconflow' || !formData.siliconFlowKey}
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50"
+                            >
+                                {testingProvider === 'siliconflow' ? <Loader2 className="animate-spin" size={14}/> : <KeyRound size={14}/>}
+                                验证Key & 获取模型
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Model Name</label>
+                        <select
+                            value={formData.siliconFlowModel}
+                            onChange={(e) => setFormData({...formData, siliconFlowModel: e.target.value})}
+                            disabled={sfModels.length === 0}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                            {sfModels.length > 0 ? (
+                                sfModels.map(model => <option key={model} value={model}>{model}</option>)
+                            ) : (
+                                <option>请先验证有效的 API Key</option>
+                            )}
+                        </select>
+                    </div>
                 </div>
             </section>
             )}
@@ -278,7 +297,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             {testResult && (
                 <div className={`p-4 rounded-lg flex items-center gap-3 ${testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                     {testResult.success ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
-                    <span className="font-medium">{testResult.msg}</span>
+                    <span className="font-medium text-sm">{testResult.msg}</span>
                 </div>
             )}
 

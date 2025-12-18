@@ -6,12 +6,45 @@ export const getAIProviderLabel = (settings: AppSettings): string => {
     case 'ollama':
       return `Ollama (${settings.ollamaModel || 'default'})`;
     case 'siliconflow':
-      return `SiliconFlow (DeepSeek)`;
+      const modelName = settings.siliconFlowModel 
+        ? settings.siliconFlowModel.split('/')[1] || 'Model' 
+        : 'Qwen2';
+      return `SiliconFlow (${modelName.replace('-instruct', '')})`;
     case 'gemini':
     default:
       return `Gemini (Flash)`;
   }
 };
+
+export const fetchSiliconFlowModels = async (apiKey: string): Promise<string[]> => {
+  if (!apiKey) {
+    throw new Error("API Key is required.");
+  }
+  const response = await fetch('https://api.siliconflow.cn/v1/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json();
+    throw new Error(errBody.message || `Failed to fetch models (Status: ${response.status})`);
+  }
+
+  const data = await response.json();
+  const models = (data.data || [])
+    .map((model: any) => model.id)
+    .filter((id: string) => (id.includes('instruct') || id.includes('chat')) && !id.includes('vision')); // Filter for chat models, exclude vision-only
+  
+  // Prioritize qwen2 if available
+  const preferredModel = 'alibaba/qwen2-72b-instruct';
+  if (models.includes(preferredModel)) {
+      return [preferredModel, ...models.filter(m => m !== preferredModel)];
+  }
+  
+  return models;
+};
+
 
 // The new core function to handle different AI providers
 const generateContentWithProvider = async (
@@ -72,7 +105,7 @@ const generateContentWithProvider = async (
       }
       messages.push({ role: 'user', content: userContent });
       
-      const model = 'deepseek-ai/deepseek-v2-chat';
+      const model = settings.siliconFlowModel || 'alibaba/qwen2-72b-instruct';
       const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -100,13 +133,16 @@ const generateContentWithProvider = async (
 
     default: // Fallback to Gemini
     case 'gemini': {
-        const apiKey = settings.geminiKey || process.env.API_KEY;
+        // Fix: Per Gemini API guidelines, API key must be from process.env.API_KEY exclusively.
+        const apiKey = process.env.API_KEY;
         if (!apiKey) {
-            throw new Error("Gemini API Key not found.");
+            // Fix: Updated error message for clarity.
+            throw new Error("Gemini API Key is not configured in environment variables.");
         }
         const ai = new GoogleGenAI({ apiKey });
         // NOTE: The new SDK does not use model instances.
-        const model = 'gemini-2.5-flash';
+        // Fix: Use a recommended model 'gemini-3-flash-preview' for general purpose tasks.
+        const model = 'gemini-3-flash-preview';
         const response = await ai.models.generateContent({
             model,
             contents,
