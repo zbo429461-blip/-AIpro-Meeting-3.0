@@ -46,11 +46,6 @@ export const PPTCreatorView: React.FC<PPTCreatorViewProps> = ({ slides = [], set
       
       setIsImgGenerating(true);
       try {
-          // Force Gemini Image model usage or warn
-          if (settings.aiProvider !== 'gemini') {
-              alert("注意：图片生成当前仅完美支持 Gemini (Nano Banana) 模型。其他模型可能无法生成有效图片。");
-          }
-          
           const base64 = await generateSlideImage(prompt, settings);
           if (base64) {
               updateSlide(activeSlide.id, 'backgroundImage', base64);

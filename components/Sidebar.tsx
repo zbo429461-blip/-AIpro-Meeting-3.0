@@ -86,14 +86,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
         })}
       </nav>
       
-      {/* Toggle Button */}
-      <div className="p-4 border-t border-slate-800 flex justify-end">
+      {/* Toggle Button & Footer */}
+      <div className="p-4 border-t border-slate-800 flex flex-col gap-2">
         <button 
             onClick={toggleCollapse}
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="self-end p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors w-full flex justify-center"
         >
             {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
+        {!collapsed && (
+            <div className="text-center text-[10px] text-slate-600 pt-2 font-mono border-t border-slate-800/50">
+                copyright xiaoxiaobo
+            </div>
+        )}
       </div>
     </div>
   );

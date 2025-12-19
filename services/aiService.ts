@@ -177,7 +177,7 @@ const generateContentWithProvider = async (
         }
         const ai = new GoogleGenAI({ apiKey });
         
-        // Use Pro model if available/requested, otherwise Flash
+        // Use standard flash model for better stability
         const model = 'gemini-3-flash-preview'; 
         
         const response = await ai.models.generateContent({
@@ -378,35 +378,40 @@ export const generatePPTStructure = async (topic: string, settings: AppSettings,
 
         // Use more capable model if available for complex structural tasks
         // If provider is Gemini, we try to force 'gemini-3-pro-preview' for better reasoning if default is flash
+        // However, we wrap in try-catch to fallback if 'gemini-3-pro-preview' is unstable (500 errors)
         if (settings.aiProvider === 'gemini') {
              const apiKey = process.env.API_KEY;
              if (apiKey) {
-                 const ai = new GoogleGenAI({ apiKey });
-                 const response = await ai.models.generateContent({
-                     model: 'gemini-3-pro-preview', // Use Pro for better structure generation
-                     contents: promptText,
-                     config: { responseMimeType: 'application/json' }
-                 });
-                 
-                 let jsonString = response.text || '[]';
-                 jsonString = jsonString.replace(/```json\n?|```/g, '').trim();
-                 let rawSlides = JSON.parse(jsonString);
-                 
-                 if (!Array.isArray(rawSlides) && typeof rawSlides === 'object') {
-                    const possibleArray = Object.values(rawSlides).find(val => Array.isArray(val));
-                    if (possibleArray) rawSlides = possibleArray;
+                 try {
+                     const ai = new GoogleGenAI({ apiKey });
+                     const response = await ai.models.generateContent({
+                         model: 'gemini-3-pro-preview', // Use Pro for better structure generation
+                         contents: promptText,
+                         config: { responseMimeType: 'application/json' }
+                     });
+                     
+                     let jsonString = response.text || '[]';
+                     jsonString = jsonString.replace(/```json\n?|```/g, '').trim();
+                     let rawSlides = JSON.parse(jsonString);
+                     
+                     if (!Array.isArray(rawSlides) && typeof rawSlides === 'object') {
+                        const possibleArray = Object.values(rawSlides).find(val => Array.isArray(val));
+                        if (possibleArray) rawSlides = possibleArray;
+                     }
+                     return Array.isArray(rawSlides) ? rawSlides.map((s: any, i: number) => ({
+                        id: `slide-${Date.now()}-${i}`,
+                        title: s.title,
+                        content: s.content || [],
+                        layout: i === 0 ? 'title' : 'content',
+                        speakerNotes: s.speakerNotes
+                    })) : [];
+                 } catch (e) {
+                     console.warn("Gemini 3 Pro failed, falling back to standard generation.", e);
                  }
-                 return Array.isArray(rawSlides) ? rawSlides.map((s: any, i: number) => ({
-                    id: `slide-${Date.now()}-${i}`,
-                    title: s.title,
-                    content: s.content || [],
-                    layout: i === 0 ? 'title' : 'content',
-                    speakerNotes: s.speakerNotes
-                })) : [];
              }
         }
 
-        // Fallback to standard provider logic for other providers
+        // Fallback to standard provider logic for other providers OR if Gemini Pro failed
         let jsonString = await generateContentWithProvider(
             settings, 
             promptText, 
@@ -442,10 +447,6 @@ export const generatePPTStructure = async (topic: string, settings: AppSettings,
 };
 
 export const generateSlideImage = async (prompt: string, settings: AppSettings): Promise<string> => {
-    // Specifically use 'gemini-2.5-flash-image' (Nano Banana) for image generation if provider is Gemini
-    // If SiliconFlow/Ollama, we might need a fallback or they might not support image gen nicely via this interface
-    
-    // For this specific request "nano banana", we try to force Gemini Image model if available
     try {
         if (settings.aiProvider === 'gemini') {
              const apiKey = process.env.API_KEY;
@@ -467,11 +468,38 @@ export const generateSlideImage = async (prompt: string, settings: AppSettings):
                  }
              }
              return '';
-        } else {
-            // Fallback for other providers if they don't support image gen easily
-            // Or return a placeholder
-            return '';
+        } else if (settings.aiProvider === 'siliconflow') {
+             // SiliconFlow Image Generation
+             if (!settings.siliconFlowKey) throw new Error("No SiliconFlow API Key");
+             
+             // Use FLUX.1-schnell for fast/good results
+             const response = await fetch('https://api.siliconflow.cn/v1/images/generations', {
+                 method: 'POST',
+                 headers: {
+                     'Authorization': `Bearer ${settings.siliconFlowKey}`,
+                     'Content-Type': 'application/json'
+                 },
+                 body: JSON.stringify({
+                     model: "black-forest-labs/FLUX.1-schnell", 
+                     prompt: prompt,
+                     image_size: "1024x576" 
+                 })
+             });
+
+             if (!response.ok) {
+                 const errText = await response.text();
+                 console.error("SiliconFlow Image Error", errText);
+                 return '';
+             }
+             
+             const data = await response.json();
+             // SiliconFlow format usually matches OpenAI: { data: [{ url: "..." }] }
+             if (data.data && data.data[0] && data.data[0].url) {
+                 return data.data[0].url;
+             }
+             return '';
         }
+        return '';
     } catch (e) {
         console.error("Image Gen Error", e);
         return '';
