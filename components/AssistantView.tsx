@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, ChatMessage, MeetingBasicInfo, MeetingFile, Participant, AgendaItem } from '../types';
-import { generateChatResponse, getAIProviderLabel } from '../services/aiService';
+import { getAIProviderLabel } from '../services/aiService';
 import { Send, Bot, User, Trash2, Loader2, Sparkles, FileEdit, CheckSquare, Mic2, Mail, FileText, Megaphone, BookOpen, Save, X, MessageSquare } from 'lucide-react';
 
 interface AssistantViewProps {
@@ -10,19 +10,23 @@ interface AssistantViewProps {
   participants?: Participant[];
   agenda?: AgendaItem[];
   onSaveSettings: (settings: AppSettings) => void;
+  // State from parent
+  messages: ChatMessage[];
+  onSendMessage: (text: string) => void;
+  isThinking: boolean;
+  setMessages?: (messages: ChatMessage[]) => void; // Optional local reset
 }
 
-export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingInfo, files = [], participants = [], agenda = [], onSaveSettings }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `你好！我是您的智能会议助手。${meetingInfo ? `当前正在协助筹备：**${meetingInfo.topic}**。` : ''}我可以帮您撰写通知、策划议程、生成致辞稿或邀请函。`,
-      timestamp: Date.now()
-    }
-  ]);
+export const AssistantView: React.FC<AssistantViewProps> = ({ 
+    settings, 
+    meetingInfo, 
+    onSaveSettings,
+    messages,
+    onSendMessage,
+    isThinking,
+    setMessages
+}) => {
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [localKnowledge, setLocalKnowledge] = useState(settings.knowledgeBase || '');
   
@@ -35,23 +39,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isThinking]);
 
   useEffect(() => {
     setLocalKnowledge(settings.knowledgeBase || '');
   }, [settings.knowledgeBase]);
-
-  // Update welcome message if meeting info changes (e.g. switching meetings)
-  useEffect(() => {
-      if (messages.length === 1 && messages[0].id === 'welcome' && meetingInfo) {
-          setMessages([{
-              id: 'welcome',
-              role: 'assistant',
-              content: `你好！我是您的智能会议助手。当前正在协助筹备：**${meetingInfo.topic}**（${meetingInfo.date}）。\n请问有什么可以帮您？`,
-              timestamp: Date.now()
-          }]);
-      }
-  }, [meetingInfo]);
 
   const handleSaveKnowledge = () => {
       onSaveSettings({
@@ -59,66 +51,14 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
           knowledgeBase: localKnowledge
       });
       setShowKnowledgeBase(false);
-      // Notify user in chat
-      const sysMsg: ChatMessage = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: '知识库已更新，接下来的回答将参考您的个人风格设置。',
-          timestamp: Date.now()
-      };
-      setMessages(prev => [...prev, sysMsg]);
   };
 
   const handleSend = async (textOverride?: string) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim()) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: textToSend,
-      timestamp: Date.now()
-    };
-
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setIsLoading(true);
-
-    // Build context for the AI
-    let systemInstruction = `You are an expert academic conference organizer assistant.`;
-    if (settings.knowledgeBase) {
-        systemInstruction += `\n\nUSER PERSONAL STYLE / KNOWLEDGE BASE:\n${settings.knowledgeBase}\n\nPlease strictly adhere to the user's style preference and vocabulary defined above.`;
-    }
-    if (meetingInfo) {
-        systemInstruction += `\n\nCURRENT MEETING CONTEXT: 
-        - Topic: "${meetingInfo.topic}"
-        - Date: ${meetingInfo.date}
-        - Location: ${meetingInfo.location || "TBD"}`;
-    }
     
-    let userQuery = textToSend;
-    // Context injection for meeting summary
-    if (textToSend.includes("会议纪要") && !textToSend.includes("模板")) {
-        let summaryContext = `\n\n--- CONTEXT FOR MEETING SUMMARY ---\n`;
-        if (participants.length > 0) summaryContext += `Participants: ${participants.map(p => p.nameCN).join(', ')}\n`;
-        if (agenda.length > 0) summaryContext += `Agenda:\n${agenda.map(a => `- ${a.time} ${a.title}`).join('\n')}\n`;
-        if (files.length > 0) summaryContext += `Reference Files: ${files.map(f => f.name).join(', ')}\n`;
-        const chatHistory = messages.slice(1, -1).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-        if (chatHistory) summaryContext += `Discussion Log:\n${chatHistory}\n`;
-        userQuery = `${textToSend}\n\nPlease use the context from the system instruction AND the following additional details to generate the summary:${summaryContext}`;
-    }
-
-    // Call the new centralized service
-    const reply = await generateChatResponse(settings, userQuery, systemInstruction);
-
-    const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: reply,
-        timestamp: Date.now()
-    };
-    setMessages(prev => [...prev, aiMsg]);
-    setIsLoading(false);
+    setInput('');
+    onSendMessage(textToSend);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -154,22 +94,23 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
                 >
                     <BookOpen size={20} /> <span className="hidden md:inline">知识库</span>
                 </button>
-                <button 
-                    onClick={() => setMessages([{
-                        id: 'welcome',
-                        role: 'assistant',
-                        content: '对话已清空。请问有什么可以帮您？',
-                        timestamp: Date.now()
-                    }])}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-2" 
-                    title="Clear History"
-                >
-                    <Trash2 size={20} />
-                </button>
             </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {messages.length === 0 && (
+                <div className="flex justify-start">
+                     <div className="flex max-w-[85%] md:max-w-[75%] gap-3 flex-row">
+                        <div className="w-10 h-10 rounded-full bg-white text-indigo-600 border border-gray-100 flex items-center justify-center flex-shrink-0 shadow-sm">
+                            <Bot size={20} />
+                        </div>
+                        <div className="p-4 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-slate-800 border border-gray-100 rounded-tl-none">
+                            你好！我是您的智能会议助手。我可以帮您撰写通知、策划议程、生成致辞稿或邀请函。
+                        </div>
+                     </div>
+                </div>
+            )}
+            
             {messages.map((msg) => (
             <div 
                 key={msg.id} 
@@ -191,7 +132,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
                 </div>
             </div>
             ))}
-            {isLoading && (
+            {isThinking && (
                 <div className="flex justify-start">
                     <div className="flex gap-3">
                         <div className="w-10 h-10 rounded-full bg-white text-indigo-600 border border-gray-100 flex items-center justify-center shadow-sm">
@@ -239,7 +180,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ settings, meetingI
                 />
                 <button 
                     onClick={() => handleSend()}
-                    disabled={isLoading || !input.trim()}
+                    disabled={isThinking || !input.trim()}
                     className="absolute right-2 top-2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 transition-colors"
                 >
                     <Send size={18} />

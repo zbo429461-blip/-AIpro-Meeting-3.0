@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from '../types';
-import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle } from 'lucide-react';
+import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle, Presentation } from 'lucide-react';
 
 interface SidebarProps {
   currentView: View;
@@ -16,6 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
     { id: View.ASSISTANT, label: '智能会议助手 Assistant', icon: Sparkles },
     { id: View.PARTICIPANTS, label: '参会人员管理 Participants', icon: Users },
     { id: View.AGENDA, label: '会议议程安排 Agenda', icon: Calendar },
+    { id: View.PPT_CREATOR, label: 'PPT 制作 Studio', icon: Presentation },
     { id: View.SIGN_IN, label: '会议签到 Sign In', icon: ClipboardCheck },
     { id: View.TABLE_CARDS, label: '桌牌生成 Cards', icon: CreditCard },
     { id: View.FILES, label: '会议资料管理 Files', icon: FileText },

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { View, Participant, AgendaItem, AppSettings, MeetingBasicInfo, Meeting, MeetingFile } from './types';
+import { View, Participant, AgendaItem, AppSettings, MeetingBasicInfo, Meeting, MeetingFile, PPTSlide, ChatMessage } from './types';
 import { ParticipantsView } from './components/ParticipantsView';
 import { AgendaView } from './components/AgendaView';
 import { TableCardView } from './components/TableCardView';
@@ -8,8 +8,9 @@ import { SettingsView } from './components/SettingsView';
 import { AssistantView } from './components/AssistantView';
 import { SignInView } from './components/SignInView';
 import { FilesView } from './components/FilesView'; 
-import { FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, MessageSquare, Sparkles, AlertTriangle } from 'lucide-react';
-import { parseMeetingRequest } from './services/aiService';
+import { PPTCreatorView } from './components/PPTCreatorView';
+import { FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, MessageSquare, Sparkles, AlertTriangle, Presentation } from 'lucide-react';
+import { parseMeetingRequest, generateChatResponse } from './services/aiService';
 
 // Speech Recognition Types
 declare global {
@@ -184,6 +185,9 @@ const App: React.FC = () => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
   
+  // Assistant State (Global to persist across view changes)
+  const [assistantThinking, setAssistantThinking] = useState(false);
+
   // Voice & Workflow State
   const [workflowState, setWorkflowState] = useState<{show: boolean, step: number, data: any, inputMode: 'voice' | 'text'}>({ 
       show: false, step: 1, data: null, inputMode: 'voice' 
@@ -201,7 +205,7 @@ const App: React.FC = () => {
     ollamaUrl: 'http://localhost:11434',
     ollamaModel: 'llama3',
     siliconFlowKey: '',
-    siliconFlowModel: 'alibaba/qwen2-72b-instruct',
+    siliconFlowModel: 'deepseek-ai/DeepSeek-V3',
     knowledgeBase: ''
   });
 
@@ -252,6 +256,7 @@ const App: React.FC = () => {
           participants: [],
           agenda: [],
           files: [],
+          chatHistory: [], // Initialize chat history
           createdAt: Date.now()
       };
       setMeetings(prev => [newMeeting, ...prev]);
@@ -272,6 +277,91 @@ const App: React.FC = () => {
       setShowEditModal(false);
       setEditingMeeting(null);
   };
+
+  // --- Assistant Logic ---
+  // Moved here so it doesn't get interrupted when switching views
+  const handleAssistantSend = async (text: string) => {
+      if (!activeMeeting || !text.trim()) return;
+
+      const userMsg: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: text,
+          timestamp: Date.now()
+      };
+
+      // Optimistic update
+      const newHistory = [...(activeMeeting.chatHistory || []), userMsg];
+      updateActiveMeeting(m => ({ ...m, chatHistory: newHistory }));
+      
+      setAssistantThinking(true);
+
+      // Build context
+      let systemInstruction = `You are an expert academic conference organizer assistant.`;
+      if (settings.knowledgeBase) {
+          systemInstruction += `\n\nUSER PERSONAL STYLE / KNOWLEDGE BASE:\n${settings.knowledgeBase}\n\nPlease strictly adhere to the user's style preference and vocabulary defined above.`;
+      }
+      if (activeMeeting.info) {
+          systemInstruction += `\n\nCURRENT MEETING CONTEXT: 
+          - Topic: "${activeMeeting.info.topic}"
+          - Date: ${activeMeeting.info.date}
+          - Location: ${activeMeeting.info.location || "TBD"}`;
+      }
+
+      // Check if summarization is needed and inject data
+      let userQuery = text;
+      if (text.includes("会议纪要") || text.includes("summarize") || text.includes("总结")) {
+          let summaryContext = `\n\n--- MEETING DATA FOR SUMMARY ---\n`;
+          if (activeMeeting.participants.length > 0) summaryContext += `Participants (${activeMeeting.participants.length}): ${activeMeeting.participants.map(p => p.nameCN).join(', ')}\n`;
+          if (activeMeeting.agenda.length > 0) summaryContext += `Agenda:\n${activeMeeting.agenda.map(a => `- ${a.time} ${a.title} (${a.speaker})`).join('\n')}\n`;
+          if (activeMeeting.files.length > 0) summaryContext += `Files: ${activeMeeting.files.map(f => f.name).join(', ')}\n`;
+          userQuery = `${text}\n\n${summaryContext}`;
+      }
+
+      try {
+          const reply = await generateChatResponse(settings, userQuery, systemInstruction);
+          
+          const aiMsg: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: reply,
+              timestamp: Date.now()
+          };
+          
+          // Use functional update to ensure we get latest state even if view changed
+          setMeetings(prevMeetings => {
+              return prevMeetings.map(m => {
+                  if (m.id === activeMeeting.id) {
+                      return {
+                          ...m,
+                          chatHistory: [...(m.chatHistory || []), userMsg, aiMsg]
+                      };
+                  }
+                  return m;
+              });
+          });
+
+      } catch (e) {
+          console.error("Assistant Error", e);
+          const errorMsg: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: "抱歉，思考过程中发生错误，请检查网络或配置。",
+              timestamp: Date.now()
+          };
+           setMeetings(prevMeetings => {
+              return prevMeetings.map(m => {
+                  if (m.id === activeMeeting.id) {
+                      return { ...m, chatHistory: [...(m.chatHistory || []), userMsg, errorMsg] };
+                  }
+                  return m;
+              });
+          });
+      } finally {
+          setAssistantThinking(false);
+      }
+  };
+
 
   // --- Workflow Handling ---
 
@@ -688,6 +778,11 @@ const App: React.FC = () => {
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded border border-gray-200 uppercase tracking-wide">
                             {activeMeeting.info.topic}
                         </span>
+                        {assistantThinking && (
+                            <span className="flex items-center gap-1 text-xs text-indigo-500 animate-pulse bg-indigo-50 px-2 py-0.5 rounded">
+                                <Sparkles size={10} /> 助手思考中...
+                            </span>
+                        )}
                     </div>
                     <div className="text-sm text-gray-400 italic">
                         {activeMeeting.info.date}
@@ -698,6 +793,7 @@ const App: React.FC = () => {
                     {currentView === View.PARTICIPANTS && <ParticipantsView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} settings={settings} />}
                     {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={(a) => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} meetingInfo={activeMeeting.info} setMeetingInfo={(i) => updateActiveMeeting(m => ({...m, info: i}))} />}
                     {currentView === View.TABLE_CARDS && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
+                    {currentView === View.PPT_CREATOR && <PPTCreatorView slides={activeMeeting.pptSlides} setSlides={(s) => updateActiveMeeting(m => ({...m, pptSlides: s}))} settings={settings} topic={activeMeeting.info.topic} />}
                     {currentView === View.SIGN_IN && <SignInView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingTopic={activeMeeting.info.topic} />}
                     {currentView === View.FILES && <FilesView files={activeMeeting.files} setFiles={(f) => updateActiveMeeting(m => ({...m, files: f}))} />}
                     {currentView === View.SETTINGS && <SettingsView settings={settings} onSave={handleSaveSettings} />}
@@ -708,6 +804,9 @@ const App: React.FC = () => {
                         participants={activeMeeting.participants}
                         agenda={activeMeeting.agenda}
                         onSaveSettings={handleSaveSettings}
+                        messages={activeMeeting.chatHistory || []}
+                        onSendMessage={handleAssistantSend}
+                        isThinking={assistantThinking}
                     />}
                     {currentView === View.DASHBOARD && (
                         <div className="p-10 max-w-7xl mx-auto">
@@ -735,17 +834,17 @@ const App: React.FC = () => {
                                </div>
                                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group">
                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                        <FileText size={100} className="text-blue-900"/>
+                                        <Presentation size={100} className="text-orange-900"/>
                                    </div>
-                                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">资料文件</h3>
-                                   <p className="text-5xl font-black text-slate-900">{activeMeeting.files.length}</p>
+                                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">PPT 页面</h3>
+                                   <p className="text-5xl font-black text-slate-900">{activeMeeting.pptSlides?.length || 0}</p>
                                </div>
                                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-2xl shadow-lg text-white relative overflow-hidden">
                                    <h3 className="text-lg font-bold mb-4 z-10 relative">快速操作</h3>
                                    <div className="grid grid-cols-2 gap-3 z-10 relative">
                                         <button onClick={() => setCurrentView(View.PARTICIPANTS)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">管理人员</button>
                                         <button onClick={() => setCurrentView(View.TABLE_CARDS)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">打印桌牌</button>
-                                        <button onClick={() => setCurrentView(View.SIGN_IN)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">开始签到</button>
+                                        <button onClick={() => setCurrentView(View.PPT_CREATOR)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">PPT 制作</button>
                                    </div>
                                </div>
                            </div>

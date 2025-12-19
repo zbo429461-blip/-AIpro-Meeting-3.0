@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Participant, CardDesign, AppSettings } from '../types';
-import { Printer, Settings2, Image as ImageIcon, Sparkles, Upload, RotateCw, Palette, Type, Move, LayoutTemplate, PenTool, FileText, UserSquare2, Download, Package } from 'lucide-react';
+import { Participant, CardDesign, AppSettings, CustomElement } from '../types';
+import { Printer, Settings2, Image as ImageIcon, Sparkles, Upload, RotateCw, Palette, Type, Move, LayoutTemplate, PenTool, FileText, UserSquare2, Download, Package, FileDown, Plus, Trash2, Edit3, Minus } from 'lucide-react';
 import { generateCardDesign, getAIProviderLabel } from '../services/aiService';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
@@ -33,20 +33,20 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
     unitScale: 1.0,
     showLine: false,
     lineColor: '#000000',
-    contentMode: 'name_unit'
+    contentMode: 'name_unit',
+    customElements: [] // Initialize custom elements
   });
   const [showSettings, setShowSettings] = useState(true);
-  const [activeTab, setActiveTab] = useState<'style' | 'layout'>('style');
+  const [activeTab, setActiveTab] = useState<'style' | 'layout' | 'custom'>('style');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   
-  // Fix: Corrected typo from HTMLDivDivElement to HTMLDivElement.
   const printAreaRef = useRef<HTMLDivElement>(null);
 
-  // Drag State - Use Refs to avoid stale closures in event listeners
-  const dragTargetRef = useRef<'name' | 'unit' | 'logo' | null>(null);
+  // Drag State
+  const dragTargetRef = useRef<'name' | 'unit' | 'logo' | string | null>(null);
   const dragStartPos = useRef<{x: number, y: number} | null>(null);
-  const initialDesignValues = useRef<{nameY: number, unitY: number, logoX: number, logoY: number} | null>(null);
+  const initialDesignValues = useRef<any>(null);
 
   const aiProviderLabel = getAIProviderLabel(settings || {} as AppSettings);
 
@@ -54,6 +54,94 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
     window.print();
   };
 
+  const handleExportWord = () => {
+    // Determine font family for Word
+    let fontFamily = 'SimSun';
+    if (design.fontFamily.includes('sans')) fontFamily = 'SimHei';
+    if (design.fontFamily.includes('art')) fontFamily = 'Microsoft YaHei';
+    if (design.fontFamily.includes('calligraphy')) fontFamily = 'KaiTi';
+
+    // Generate Custom Elements HTML for Word
+    // For the rotated top cell, we need to Mirror X (100-x) and Keep Y (y) 
+    // because the container itself is rotated 180 degrees.
+    const getCustomElementsHTML = (isTopHalf: boolean) => {
+        if (!design.customElements || design.customElements.length === 0) return '';
+        
+        return design.customElements.map(el => {
+            // Logic:
+            // Bottom Half (Normal): x, y
+            // Top Half (Rotated): x' = 100 - x, y' = y
+            const left = isTopHalf ? (100 - el.x) : el.x;
+            const top = el.y; 
+            
+            if (el.type === 'text') {
+                return `<div style="position:absolute; top:${top}%; left:${left}%; font-size:${el.fontSize}px; color:${el.color}; font-weight:${el.isBold ? 'bold' : 'normal'}; transform: translate(-50%, -50%); white-space:nowrap;">${el.content}</div>`;
+            } else {
+                return `<div style="position:absolute; top:${top}%; left:${left}%; width:${el.length}px; height:${el.width}px; background-color:${el.color}; transform: translate(-50%, -50%);"></div>`;
+            }
+        }).join('');
+    };
+
+    const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+        <meta charset='utf-8'>
+        <title>Table Cards</title>
+        <style>
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; padding: 0; font-family: '${fontFamily}', serif; }
+            table { width: 100%; height: 100vh; border-collapse: collapse; page-break-after: always; table-layout: fixed; }
+            td { text-align: center; vertical-align: middle; position: relative; padding: 0; }
+            .card-container { width: 100%; height: 100%; }
+            .name { font-size: 150pt; font-weight: bold; line-height: 1.1; color: ${design.fontColor}; }
+            .unit { font-size: 40pt; margin-top: 30pt; font-weight: normal; color: ${design.fontColor}; }
+            /* Microsoft Word Rotation Filter */
+            .rotated-cell { filter: progid:DXImageTransform.Microsoft.BasicImage(rotation=2); }
+        </style>
+    </head>
+    <body>`;
+
+    const content = participants.map(p => `
+        <table>
+            <!-- Top Half (Rotated using Filter) -->
+            <tr style="height: 50%;">
+                <td style="background-color: ${design.bgColor}; border-bottom: 1px dashed #ccc;">
+                    <div class="rotated-cell" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;">
+                        <!-- Custom Elements (Mirrored Logic applied) -->
+                        ${getCustomElementsHTML(true)}
+                        
+                        <div class="name" style="opacity: 0.6;">${p.nameCN}</div>
+                        ${design.contentMode === 'name_unit' && p.unitCN ? `<div class="unit" style="opacity: 0.6;">${p.unitCN}</div>` : ''}
+                    </div>
+                </td>
+            </tr>
+            <!-- Bottom Half -->
+            <tr style="height: 50%;">
+                <td style="background-color: ${design.bgColor};">
+                    <div style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;">
+                        <!-- Custom Elements -->
+                        ${getCustomElementsHTML(false)}
+                    
+                        <div class="name">${p.nameCN}</div>
+                        ${design.contentMode === 'name_unit' && p.unitCN ? `<div class="unit">${p.unitCN}</div>` : ''}
+                    </div>
+                </td>
+            </tr>
+        </table>
+    `).join('');
+
+    const footer = "</body></html>";
+    const sourceHTML = header + content + footer;
+
+    const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+    const fileDownload = document.createElement("a");
+    document.body.appendChild(fileDownload);
+    fileDownload.href = source;
+    fileDownload.download = `桌牌导出_${meetingTopic || 'Cards'}.doc`;
+    fileDownload.click();
+    document.body.removeChild(fileDownload);
+  };
+
+  // ... (handleDownloadAllImages, handleAiDesign, handleLogoUpload, getFontSize, getBackgroundStyle remain same) ...
   const handleDownloadAllImages = async () => {
       if (!printAreaRef.current) return;
       setIsCapturing(true);
@@ -113,7 +201,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
               fontFamily: result.fontFamily === 'SimHei' ? 'font-sans-sc' : 'font-serif-sc',
               bgType: 'solid'
           }));
-      } catch (e) { alert(`使用 ${aiProviderLabel} 生成设计失败。`); } 
+      } catch (e: any) { alert(`使用 ${aiProviderLabel} 生成失败: ${e.message}`); } 
       finally { setIsAiLoading(false); }
   };
 
@@ -141,22 +229,74 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
       return { backgroundColor: design.bgColor };
   };
 
+  // --- CUSTOM ELEMENT HANDLERS ---
+  const addCustomText = () => {
+      const newEl: CustomElement = {
+          id: Date.now().toString(),
+          type: 'text',
+          content: '双击编辑文本',
+          x: 50,
+          y: 20, // Top area
+          color: design.fontColor,
+          fontSize: 24,
+          isBold: false
+      };
+      setDesign(prev => ({ ...prev, customElements: [...(prev.customElements || []), newEl] }));
+  };
+
+  const addCustomLine = () => {
+      const newEl: CustomElement = {
+          id: Date.now().toString(),
+          type: 'line',
+          x: 50,
+          y: 25,
+          color: design.fontColor,
+          width: 2, // Thickness
+          length: 200 // Length px
+      };
+      setDesign(prev => ({ ...prev, customElements: [...(prev.customElements || []), newEl] }));
+  };
+
+  const updateCustomElement = (id: string, updates: Partial<CustomElement>) => {
+      setDesign(prev => ({
+          ...prev,
+          customElements: prev.customElements?.map(el => el.id === id ? { ...el, ...updates } : el)
+      }));
+  };
+
+  const removeCustomElement = (id: string) => {
+      setDesign(prev => ({
+          ...prev,
+          customElements: prev.customElements?.filter(el => el.id !== id)
+      }));
+  };
+
   // --- DRAG HANDLERS ---
-  const handleMouseDown = (e: React.MouseEvent, target: 'name' | 'unit' | 'logo') => {
-    // Only allow drag in Layout mode. In Style mode, allow text selection/editing.
-    if (activeTab !== 'layout') return;
+  const handleMouseDown = (e: React.MouseEvent, target: 'name' | 'unit' | 'logo' | string) => {
+    // Check mode
+    if (activeTab === 'style' && !['name', 'unit'].includes(target)) return; // Allow click in style mode for text editing? No, handleMouseDown prevents default
+    if (activeTab === 'style') return; // Don't drag in style mode
 
     e.preventDefault(); 
     e.stopPropagation();
     
     dragTargetRef.current = target;
     dragStartPos.current = { x: e.clientX, y: e.clientY };
-    initialDesignValues.current = {
-        nameY: design.nameY,
-        unitY: design.unitY,
-        logoX: design.logoX,
-        logoY: design.logoY
-    };
+    
+    if (target === 'name' || target === 'unit' || target === 'logo') {
+        initialDesignValues.current = {
+            nameY: design.nameY,
+            unitY: design.unitY,
+            logoX: design.logoX,
+            logoY: design.logoY
+        };
+    } else {
+        // Custom Element
+        const el = design.customElements?.find(el => el.id === target);
+        if (el) {
+            initialDesignValues.current = { x: el.x, y: el.y };
+        }
+    }
     
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -174,22 +314,28 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
     setDesign(prev => {
         const next = { ...prev };
         if (target === 'name') {
-            // Only allow vertical for text to keep centering
-            next.nameY = initialDesignValues.current!.nameY + deltaY;
+            next.nameY = initialDesignValues.current.nameY + deltaY;
         } else if (target === 'unit') {
-            next.unitY = initialDesignValues.current!.unitY + deltaY;
+            next.unitY = initialDesignValues.current.unitY + deltaY;
         } else if (target === 'logo') {
-            // Convert px delta to approx percentage. 
-            // Assuming Card Width ~ 210mm (~793px), Height ~ 297mm (~1122px)
-            // 1% X ~ 8px, 1% Y ~ 11px
+            const percentDeltaX = deltaX / 8; 
+            const percentDeltaY = deltaY / 11;
+            next.logoX = Math.min(100, Math.max(0, initialDesignValues.current.logoX + percentDeltaX));
+            next.logoY = Math.min(100, Math.max(0, initialDesignValues.current.logoY + percentDeltaY));
+        } else {
+            // Custom Element Drag
+            // Convert px delta to percentage approx (based on A4 dimensions ~793 x 1122)
+            // But dragging happens in the preview area which might be scaled.
+            // Let's approximate: 1% width ~ 8px, 1% height ~ 11px
             const percentDeltaX = deltaX / 8; 
             const percentDeltaY = deltaY / 11;
             
-            const newY = initialDesignValues.current!.logoY + percentDeltaY;
+            const newX = initialDesignValues.current.x + percentDeltaX;
+            const newY = initialDesignValues.current.y + percentDeltaY;
             
-            next.logoX = Math.min(100, Math.max(0, initialDesignValues.current!.logoX + percentDeltaX));
-            // Constrain Y to be in the bottom half (50% to 100%)
-            next.logoY = Math.min(100, Math.max(50, newY));
+            next.customElements = next.customElements?.map(el => 
+                el.id === target ? { ...el, x: Math.max(0, Math.min(100, newX)), y: Math.max(0, Math.min(100, newY)) } : el
+            );
         }
         return next;
     });
@@ -212,8 +358,9 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
            </div>
            
            <div className="flex border-b border-gray-200">
-               <button onClick={() => setActiveTab('style')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'style' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>样式风格</button>
-               <button onClick={() => setActiveTab('layout')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'layout' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>布局微调</button>
+               <button onClick={() => setActiveTab('style')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'style' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>样式</button>
+               <button onClick={() => setActiveTab('layout')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'layout' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>布局</button>
+               <button onClick={() => setActiveTab('custom')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'custom' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>自由设计</button>
            </div>
            
            <div className="p-6 space-y-8 pb-20">
@@ -374,6 +521,76 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                     </>
                 )}
 
+                {activeTab === 'custom' && (
+                    <div className="space-y-6">
+                        <div className="flex gap-2">
+                            <button onClick={addCustomText} className="flex-1 py-2 bg-indigo-50 text-indigo-700 rounded text-xs flex items-center justify-center gap-1 font-bold border border-indigo-200 hover:bg-indigo-100">
+                                <Plus size={14}/> 添加文字
+                            </button>
+                            <button onClick={addCustomLine} className="flex-1 py-2 bg-gray-50 text-gray-700 rounded text-xs flex items-center justify-center gap-1 font-bold border border-gray-200 hover:bg-gray-100">
+                                <Minus size={14}/> 添加线条
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {design.customElements?.map((el, index) => (
+                                <div key={el.id} className="p-3 bg-gray-50 border border-gray-200 rounded relative group">
+                                    <button onClick={() => removeCustomElement(el.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500"><Trash2 size={12}/></button>
+                                    
+                                    <div className="text-xs font-bold text-gray-500 mb-2 uppercase">{el.type === 'text' ? '文本元素' : '线条元素'} {index+1}</div>
+                                    
+                                    {el.type === 'text' && (
+                                        <div className="space-y-2">
+                                            <input 
+                                                value={el.content} 
+                                                onChange={e => updateCustomElement(el.id, {content: e.target.value})}
+                                                className="w-full p-1 border rounded text-xs"
+                                                placeholder="输入文本"
+                                            />
+                                            <div className="flex gap-2">
+                                                <input type="color" value={el.color} onChange={e => updateCustomElement(el.id, {color: e.target.value})} className="w-6 h-6 rounded border-none"/>
+                                                <input 
+                                                    type="number" 
+                                                    value={el.fontSize} 
+                                                    onChange={e => updateCustomElement(el.id, {fontSize: Number(e.target.value)})} 
+                                                    className="w-16 p-1 border rounded text-xs" 
+                                                    title="Font Size"
+                                                />
+                                                <button 
+                                                    onClick={() => updateCustomElement(el.id, {isBold: !el.isBold})}
+                                                    className={`px-2 py-1 rounded text-xs border ${el.isBold ? 'bg-gray-200 font-bold' : 'bg-white'}`}
+                                                >
+                                                    B
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {el.type === 'line' && (
+                                        <div className="space-y-2">
+                                            <div className="flex gap-2 items-center">
+                                                <label className="text-xs text-gray-400">颜色</label>
+                                                <input type="color" value={el.color} onChange={e => updateCustomElement(el.id, {color: e.target.value})} className="w-6 h-6 rounded border-none"/>
+                                            </div>
+                                            <div className="flex gap-2 items-center">
+                                                <label className="text-xs text-gray-400">粗细</label>
+                                                <input type="range" min="1" max="20" value={el.width} onChange={e => updateCustomElement(el.id, {width: Number(e.target.value)})} className="flex-1"/>
+                                            </div>
+                                            <div className="flex gap-2 items-center">
+                                                <label className="text-xs text-gray-400">长度</label>
+                                                <input type="range" min="20" max="600" value={el.length} onChange={e => updateCustomElement(el.id, {length: Number(e.target.value)})} className="flex-1"/>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {(!design.customElements || design.customElements.length === 0) && (
+                                <div className="text-center text-gray-400 text-xs py-4">暂无自定义元素</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 <div className="text-center">
                     <button onClick={handleAiDesign} disabled={isAiLoading} className="w-full py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded text-sm flex justify-center items-center gap-2">
                          {isAiLoading ? <RotateCw className="animate-spin" size={14}/> : <Sparkles size={14}/>} AI 配色建议
@@ -420,10 +637,17 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                 </button>
                 <div className="flex gap-4">
                      <div className="text-xs text-gray-400 flex items-center">
-                        {activeTab === 'layout' 
+                        {activeTab === 'layout' || activeTab === 'custom'
                             ? "✨ 布局模式：可直接拖动预览区元素" 
                             : "🎨 样式模式：可点击文字直接编辑"}
                      </div>
+                     <button 
+                        onClick={handleExportWord}
+                        className="flex items-center gap-2 px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all shadow-sm"
+                    >
+                        <FileDown size={18} />
+                        导出 Word
+                    </button>
                      <button 
                         onClick={handleDownloadAllImages}
                         disabled={isCapturing}
@@ -467,9 +691,10 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                         };
                         
                         // Interactive Classes based on mode
-                        const nameCursor = activeTab === 'layout' ? 'cursor-ns-resize hover:opacity-80' : 'cursor-text';
-                        const unitCursor = activeTab === 'layout' ? 'cursor-ns-resize hover:opacity-80' : 'cursor-text';
-                        const logoCursor = activeTab === 'layout' ? 'cursor-move' : 'cursor-default';
+                        const nameCursor = (activeTab === 'layout' || activeTab === 'custom') ? 'cursor-ns-resize hover:opacity-80' : 'cursor-text';
+                        const unitCursor = (activeTab === 'layout' || activeTab === 'custom') ? 'cursor-ns-resize hover:opacity-80' : 'cursor-text';
+                        const logoCursor = (activeTab === 'layout' || activeTab === 'custom') ? 'cursor-move' : 'cursor-default';
+                        const elCursor = (activeTab === 'layout' || activeTab === 'custom') ? 'cursor-move hover:ring-1 hover:ring-blue-400' : '';
 
                         return (
                         <div 
@@ -485,6 +710,26 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
 
                             {/* Top Half (Upside down) */}
                             <div className="h-1/2 flex flex-col justify-center items-center p-12 border-b border-white/20 border-dashed print:border-none transform rotate-180 relative opacity-90 pointer-events-none">
+                                {/* Custom Elements (Mirrored X) */}
+                                {design.customElements?.map(el => (
+                                    <div 
+                                        key={el.id} 
+                                        className="absolute pointer-events-none"
+                                        style={{
+                                            // Mirror X for Top Half
+                                            left: `${100 - el.x}%`,
+                                            top: `${el.y}%`,
+                                            transform: 'translate(-50%, -50%)',
+                                        }}
+                                    >
+                                        {el.type === 'text' ? (
+                                            <span style={{ fontSize: el.fontSize, color: el.color, fontWeight: el.isBold ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>{el.content}</span>
+                                        ) : (
+                                            <div style={{ width: el.length, height: el.width, backgroundColor: el.color }}></div>
+                                        )}
+                                    </div>
+                                ))}
+
                                 {/* Mirrored Logo */}
                                 {design.logo && (
                                     <div
@@ -516,6 +761,26 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
 
                             {/* Bottom Half (Interactive) */}
                             <div className="h-1/2 flex flex-col justify-center items-center p-12 relative">
+                                 {/* Custom Elements (Interactive) */}
+                                 {design.customElements?.map(el => (
+                                    <div 
+                                        key={el.id} 
+                                        onMouseDown={(e) => handleMouseDown(e, el.id)}
+                                        className={`absolute z-20 ${elCursor}`}
+                                        style={{
+                                            left: `${el.x}%`,
+                                            top: `${el.y}%`,
+                                            transform: 'translate(-50%, -50%)',
+                                        }}
+                                    >
+                                        {el.type === 'text' ? (
+                                            <span style={{ fontSize: el.fontSize, color: el.color, fontWeight: el.isBold ? 'bold' : 'normal', whiteSpace: 'nowrap' }}>{el.content}</span>
+                                        ) : (
+                                            <div style={{ width: el.length, height: el.width, backgroundColor: el.color }}></div>
+                                        )}
+                                    </div>
+                                ))}
+
                                 {/* Draggable Logo */}
                                 {design.logo && (
                                     <div
@@ -535,7 +800,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                                     style={nameStyle} 
                                     className={`leading-tight font-bold whitespace-nowrap text-center ${textClass} ${nameCursor} transition-opacity`} 
                                     onMouseDown={(e) => handleMouseDown(e, 'name')}
-                                    title={activeTab === 'layout' ? "拖动调整上下位置" : "点击编辑"}
+                                    title={(activeTab === 'layout' || activeTab === 'custom') ? "拖动调整上下位置" : "点击编辑"}
                                     contentEditable={activeTab === 'style'}
                                     suppressContentEditableWarning
                                 >
@@ -556,7 +821,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
                                             style={unitStyle} 
                                             className={`mt-8 font-bold opacity-70 text-center ${unitCursor} transition-opacity`} 
                                             onMouseDown={(e) => handleMouseDown(e, 'unit')}
-                                            title={activeTab === 'layout' ? "拖动调整上下位置" : "点击编辑"}
+                                            title={(activeTab === 'layout' || activeTab === 'custom') ? "拖动调整上下位置" : "点击编辑"}
                                             contentEditable={activeTab === 'style'}
                                             suppressContentEditableWarning
                                         >

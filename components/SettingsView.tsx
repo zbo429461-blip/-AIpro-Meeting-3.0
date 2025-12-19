@@ -18,12 +18,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
   const [testResult, setTestResult] = useState<{success: boolean, msg: string} | null>(null);
   const [sfModels, setSfModels] = useState<string[]>([]);
 
-  // Auto-fetch models if a key is present on load
+  // Update local state when prop changes
   useEffect(() => {
-    if (formData.aiProvider === 'siliconflow' && formData.siliconFlowKey) {
-        testConnection();
-    }
-  }, [formData.aiProvider]);
+      setFormData(settings);
+  }, [settings]);
 
   const handleSave = () => {
     onSave(formData);
@@ -48,6 +46,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                setSfModels(models);
                if (models.length > 0) {
                    setTestResult({ success: true, msg: `连接成功！已加载 ${models.length} 个可用模型。` });
+                   // Update model selection if current is invalid
                    if (!formData.siliconFlowModel || !models.includes(formData.siliconFlowModel)) {
                        setFormData(prev => ({ ...prev, siliconFlowModel: models[0] }));
                    }
@@ -66,7 +65,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-8 max-w-4xl mx-auto bg-white/50 min-h-full">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
           <h2 className="text-2xl font-serif-sc font-bold text-gray-900">
             系统设置 / Configuration
@@ -119,7 +118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                               SiliconFlow (硅基流动)
                           </h4>
                           <div className="pl-8 text-sm text-gray-600 space-y-2">
-                              <p>推荐国内用户使用，速度快，支持 Qwen (通义千问)、DeepSeek 等国产强力模型。</p>
+                              <p>推荐国内用户使用，速度快，支持 DeepSeek-V3/R1、Qwen 等国产强力模型。</p>
                               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                   <p className="font-mono text-xs mb-1">1. 注册账号: <a href="https://cloud.siliconflow.cn" target="_blank" className="text-blue-600 underline">cloud.siliconflow.cn</a></p>
                                   <p className="font-mono text-xs mb-1">2. 进入 "API 密钥" 菜单创建一个新 Key</p>
@@ -160,9 +159,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {[
-                    { id: 'gemini', label: 'Google Gemini', desc: '推荐: 稳定/快速' },
+                    { id: 'gemini', label: 'Google Gemini', desc: '推荐: 稳定/快速/绘图' },
                     { id: 'ollama', label: 'Local Ollama', desc: '本地部署模型' },
-                    { id: 'siliconflow', label: '硅基流动 SiliconFlow', desc: '国产大模型API' }
+                    { id: 'siliconflow', label: '硅基流动 SiliconFlow', desc: 'DeepSeek / Qwen' }
                 ].map((provider) => (
                 <button
                     key={provider.id}
@@ -184,7 +183,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             </div>
             </section>
 
-            {/* Fix: Removed Gemini API key configuration UI. Per guidelines, the API key must be sourced exclusively from environment variables. */}
+            {/* Gemini Config */}
             {formData.aiProvider === 'gemini' && (
               <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-3">
@@ -263,6 +262,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                                     setSfModels([]);
                                 }}
                                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                                placeholder="sk-..."
                             />
                             <button 
                                 onClick={testConnection}
@@ -279,15 +279,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                         <select
                             value={formData.siliconFlowModel}
                             onChange={(e) => setFormData({...formData, siliconFlowModel: e.target.value})}
-                            disabled={sfModels.length === 0}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            disabled={sfModels.length === 0 && !formData.siliconFlowModel}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent disabled:bg-gray-100"
                         >
                             {sfModels.length > 0 ? (
                                 sfModels.map(model => <option key={model} value={model}>{model}</option>)
                             ) : (
-                                <option>请先验证有效的 API Key</option>
+                                <option>{formData.siliconFlowModel || "请先验证有效的 API Key"}</option>
                             )}
                         </select>
+                         <p className="text-xs text-gray-500 mt-1">
+                            支持 DeepSeek-V3, DeepSeek-R1, Qwen 等模型。
+                        </p>
                     </div>
                 </div>
             </section>

@@ -36,6 +36,20 @@ export interface MeetingFile {
   url?: string; // Added for Object URL
 }
 
+export interface CustomElement {
+  id: string;
+  type: 'text' | 'line';
+  content?: string;
+  x: number; // percentage
+  y: number; // percentage
+  color: string;
+  fontSize?: number; // px
+  width?: number; // px (for line thickness)
+  length?: number; // px (for line length)
+  rotation?: number;
+  isBold?: boolean;
+}
+
 export interface CardDesign {
   templateId: 'classic' | 'modern' | 'bordered' | 'minimal';
   bgType: 'solid' | 'gradient';
@@ -65,6 +79,25 @@ export interface CardDesign {
   lineColor?: string;
   
   contentMode: 'name_unit' | 'name_only';
+  
+  customElements?: CustomElement[]; // New: Custom elements for free design
+}
+
+// PPT Slide Structure
+export interface PPTSlide {
+  id: string;
+  title: string;
+  content: string[]; // Bullet points
+  speakerNotes?: string;
+  backgroundImage?: string; // Base64 or URL
+  layout: 'title' | 'content' | 'image_left' | 'image_right';
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
 }
 
 // The master object for a single meeting
@@ -75,6 +108,8 @@ export interface Meeting {
   agenda: AgendaItem[];
   files: MeetingFile[];
   cardDesign?: CardDesign; // Each meeting can have its own design
+  pptSlides?: PPTSlide[]; // New: PPT Slides
+  chatHistory?: ChatMessage[]; // New: Persist chat history per meeting
   createdAt: number;
 }
 
@@ -88,13 +123,6 @@ export interface AppSettings {
   knowledgeBase?: string; // New: Personal style/knowledge base
 }
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
-
 export enum View {
   MEETING_LIST = 'MEETING_LIST', // New Home View
   DASHBOARD = 'DASHBOARD',
@@ -102,6 +130,7 @@ export enum View {
   PARTICIPANTS = 'PARTICIPANTS',
   AGENDA = 'AGENDA',
   TABLE_CARDS = 'TABLE_CARDS',
+  PPT_CREATOR = 'PPT_CREATOR', // New View
   SIGN_IN = 'SIGN_IN', 
   FILES = 'FILES',
   SETTINGS = 'SETTINGS',
