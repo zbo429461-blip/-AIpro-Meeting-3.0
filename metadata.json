@@ -2,6 +2,6 @@
   "requestFramePermissions": [
     "microphone"
   ],
-  "name": "智能会议助手 AIpro Meeting 3.1.0",
-  "description": ""
+  "name": "小小博的AIpro工作助手 3.5.1",
+  "description": "集成 Ollama、硅基流动及 Gemini 的多模态智能工作会议助手"
 }

@@ -1,25 +1,26 @@
+
 import React from 'react';
 import { View } from '../types';
-import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle, Presentation } from 'lucide-react';
+import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle, Presentation, FileSignature, LayoutList } from 'lucide-react';
 
 interface SidebarProps {
   currentView: View;
   onViewChange: (view: View) => void;
   collapsed: boolean;
   toggleCollapse: () => void;
-  onBackToHome: () => void; // New Prop
+  onBackToHome: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, collapsed, toggleCollapse, onBackToHome }) => {
   const menuItems = [
-    { id: View.DASHBOARD, label: '系统概览 Dashboard', icon: Home },
-    { id: View.ASSISTANT, label: '智能会议助手 Assistant', icon: Sparkles },
+    { id: View.DASHBOARD, label: '工作台概览 Dashboard', icon: Home },
+    { id: View.ASSISTANT, label: '智能办公助手 AI Assistant', icon: Sparkles },
     { id: View.PARTICIPANTS, label: '参会人员管理 Participants', icon: Users },
     { id: View.AGENDA, label: '会议议程安排 Agenda', icon: Calendar },
     { id: View.PPT_CREATOR, label: 'PPT 制作 Studio', icon: Presentation },
     { id: View.SIGN_IN, label: '会议签到 Sign In', icon: ClipboardCheck },
     { id: View.TABLE_CARDS, label: '桌牌生成 Cards', icon: CreditCard },
-    { id: View.FILES, label: '会议资料管理 Files', icon: FileText },
+    { id: View.FILES, label: '资料中心 Files', icon: FileText },
     { id: View.SETTINGS, label: '系统设置 Settings', icon: Settings },
   ];
 
@@ -28,32 +29,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
       className={`bg-slate-900 text-gray-300 border-r border-slate-800 min-h-screen shadow-xl flex flex-col transition-all duration-300 z-20 no-print
       ${collapsed ? 'w-20' : 'w-72'}`}
     >
-      {/* Header */}
       <div className="h-16 flex items-center justify-center border-b border-slate-800 relative bg-slate-950">
         <div className={`flex items-center gap-2 transition-opacity duration-200 ${collapsed ? 'opacity-0 absolute' : 'opacity-100'}`}>
            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/30">
-             M
+             X
            </div>
-           <span className="text-lg font-bold text-white tracking-wide">AI Meeting</span>
+           <span className="text-sm font-bold text-white tracking-wide truncate max-w-[180px]">小小博 AIpro 助手</span>
         </div>
         {collapsed && (
            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
-             M
+             X
            </div>
         )}
       </div>
 
-      {/* Back to Home */}
       <button 
         onClick={onBackToHome}
         className={`mx-3 mt-4 mb-2 flex items-center gap-3 px-3 py-3 bg-slate-800/50 hover:bg-slate-800 text-indigo-300 rounded-xl transition-all border border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}
-        title="返回会议列表"
+        title="返回列表"
       >
         <ArrowLeftCircle size={20} />
-        {!collapsed && <span className="font-medium text-sm">切换会议</span>}
+        {!collapsed && <span className="font-medium text-sm">返回会议列表</span>}
       </button>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -62,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className={`w-full flex items-center gap-4 px-3 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group relative
+              className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 group relative
                 ${isActive 
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' 
                   : 'hover:bg-slate-800 hover:text-white'
@@ -86,7 +84,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
         })}
       </nav>
       
-      {/* Toggle Button & Footer */}
       <div className="p-4 border-t border-slate-800 flex flex-col gap-2">
         <button 
             onClick={toggleCollapse}
@@ -94,11 +91,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
         >
             {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
-        {!collapsed && (
-            <div className="text-center text-[10px] text-slate-600 pt-2 font-mono border-t border-slate-800/50">
-                copyright xiaoxiaobo
-            </div>
-        )}
       </div>
     </div>
   );

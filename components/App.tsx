@@ -9,7 +9,8 @@ import { AssistantView } from './components/AssistantView';
 import { SignInView } from './components/SignInView';
 import { FilesView } from './components/FilesView'; 
 import { PPTCreatorView } from './components/PPTCreatorView';
-import { FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, MessageSquare, Sparkles, AlertTriangle, Presentation } from 'lucide-react';
+import { AssetManagerView } from './components/AssetManagerView';
+import { FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, MessageSquare, Sparkles, AlertTriangle, Presentation, Briefcase, FormInput, LayoutGrid, ArrowLeftCircle } from 'lucide-react';
 import { parseMeetingRequest, generateChatResponse } from './services/aiService';
 
 // Speech Recognition Types
@@ -178,7 +179,7 @@ const WorkflowOverlay = ({ step, data, onClose, onExecute, inputMode, setInputMo
 
 const App: React.FC = () => {
   // Global View State
-  const [currentView, setCurrentView] = useState<View>(View.MEETING_LIST);
+  const [currentView, setCurrentView] = useState<View>(View.HOME);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Data State
@@ -609,6 +610,70 @@ const App: React.FC = () => {
 
   // --- Render Logic ---
   
+  if (currentView === View.HOME) {
+      return (
+          <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans">
+              <div className="max-w-4xl w-full px-6 text-center">
+                  <div className="mb-12">
+                      <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6">
+                          X
+                      </div>
+                      <h1 className="text-4xl font-serif-sc font-bold text-slate-900 mb-4">xiaoxiaobo 工作智能助手</h1>
+                      <p className="text-xl text-slate-500">智能工作全流程管理 · 高效 · 便捷 · 智能</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      {/* Meeting Module */}
+                      <div 
+                        onClick={() => setCurrentView(View.MEETING_LIST)}
+                        className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-indigo-100 transition-all cursor-pointer group transform hover:-translate-y-2"
+                      >
+                          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <LayoutDashboard size={28}/>
+                          </div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">智能会议功能</h3>
+                          <p className="text-sm text-gray-500">会议创建、议程安排、桌牌制作、AI 辅助全流程管理</p>
+                      </div>
+
+                      {/* Assets Module */}
+                      <div 
+                        onClick={() => setCurrentView(View.ASSET_MANAGER)}
+                        className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-green-100 transition-all cursor-pointer group transform hover:-translate-y-2"
+                      >
+                          <div className="w-14 h-14 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <Briefcase size={28}/>
+                          </div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">资产管理功能</h3>
+                          <p className="text-sm text-gray-500">固定资产登记、位置管理、在线编辑与Excel导出</p>
+                      </div>
+
+                      {/* Forms Module (Placeholder) */}
+                      <div 
+                        onClick={() => alert("电子表单功能开发中...")}
+                        className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-orange-100 transition-all cursor-pointer group transform hover:-translate-y-2 relative overflow-hidden"
+                      >
+                           <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-bold">Coming Soon</div>
+                          <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <FormInput size={28}/>
+                          </div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">电子表单功能</h3>
+                          <p className="text-sm text-gray-500">自定义表单、数据收集、智能统计与分析</p>
+                      </div>
+                  </div>
+                  
+                  <div className="mt-16 text-center text-slate-400 text-xs font-mono">
+                      copyright xiaoxiaobo
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  if (currentView === View.ASSET_MANAGER) {
+      return <AssetManagerView onBack={() => setCurrentView(View.HOME)} />;
+  }
+
+  // --- EXISTING MEETING VIEW LOGIC ---
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] text-gray-800 font-sans">
       
@@ -645,12 +710,17 @@ const App: React.FC = () => {
               <div className="max-w-6xl mx-auto w-full flex-1">
                   <header className="mb-12 flex justify-between items-end">
                       <div>
+                           <div className="flex items-center gap-2 mb-2">
+                               <button onClick={() => setCurrentView(View.HOME)} className="text-gray-400 hover:text-indigo-600 flex items-center gap-1 text-sm font-medium transition-colors">
+                                   <ArrowLeftCircle size={16}/> 返回主页
+                               </button>
+                           </div>
                           <h1 className="text-4xl font-serif-sc font-bold text-slate-900 mb-3 flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-xl shadow-lg">M</div>
-                              AI Meeting Hub
+                              智能会议功能
                           </h1>
                           <div className="flex items-center gap-4">
-                              <p className="text-slate-500 text-lg">智能会议全流程管理中心</p>
+                              <p className="text-slate-500 text-lg">智能工作全流程管理</p>
                               <span className="text-gray-300">|</span>
                               <a 
                                 href="https://emeet.cupl.edu.cn/app.DTManage/?m=dtmanage&c=AMeetScreen&a=initMain" 
@@ -776,6 +846,9 @@ const App: React.FC = () => {
             <>
                 <header className="bg-white border-b border-gray-200 h-16 flex items-center px-8 justify-between shadow-sm z-10 flex-shrink-0">
                     <div className="flex items-center gap-3">
+                        <button onClick={() => setCurrentView(View.MEETING_LIST)} className="text-gray-400 hover:text-indigo-600 mr-2 transition-colors">
+                            <ArrowLeftCircle size={20}/>
+                        </button>
                         <h1 className="text-xl font-serif-sc font-bold text-slate-800 tracking-tight">
                             智能会议助手 <span className="text-indigo-600">AI Meeting</span>
                         </h1>
@@ -957,3 +1030,5 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+export default App;
