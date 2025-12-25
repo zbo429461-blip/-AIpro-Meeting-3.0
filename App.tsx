@@ -243,13 +243,44 @@ const App: React.FC = () => {
 
   const handleAssistantSend = async (text: string) => {
       if (!activeMeeting || !text.trim()) return;
+      
       const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
       updateActiveMeeting(m => ({ ...m, chatHistory: [...(m.chatHistory || []), userMsg] }));
       setAssistantThinking(true);
+      
       try {
-          const sysMsg = `You are a helpful meeting assistant. Use context: ${activeMeeting.info.topic}`;
-          const reply = await generateChatResponse(settings, text, sysMsg);
+          // Optimized Summarization & Context Injection
+          let userQuery = text;
+          const summarizationKeywords = ["会议纪要", "总结", "summarize", "整理", "记录", "整理", "纪要", "归纳", "笔记", "minutes", "highlights"];
+          
+          if (summarizationKeywords.some(k => text.toLowerCase().includes(k))) {
+              let summaryContext = `\n\n--- [系统自动同步: 当前会议核心数据] ---\n`;
+              summaryContext += `【会议概况】\n- 主题: ${activeMeeting.info.topic}\n- 时间: ${activeMeeting.info.date}\n- 地点: ${activeMeeting.info.location || '待定'}\n`;
+              
+              if (activeMeeting.participants.length > 0) {
+                  const signedIn = activeMeeting.participants.filter(p => p.isSignedIn).length;
+                  summaryContext += `【参会情况】\n- 参会人数: ${activeMeeting.participants.length} 人 (已签到 ${signedIn} 人)\n- 名单: ${activeMeeting.participants.map(p => `${p.nameCN} (${p.unitCN})`).join(', ')}\n`;
+              }
+              
+              if (activeMeeting.agenda.length > 0) {
+                  summaryContext += `【议程安排】\n${activeMeeting.agenda.map(a => `- [${a.time}] ${a.title} (负责人/发言人: ${a.speaker || '未指定'})`).join('\n')}\n`;
+              }
+              
+              if (activeMeeting.files && activeMeeting.files.length > 0) {
+                  summaryContext += `【参考资料】\n- 附件列表: ${activeMeeting.files.map(f => f.name).join(', ')}\n`;
+              }
+              
+              userQuery = `${text}\n\n${summaryContext}\n\n[指令]: 请结合以上结构化会议数据，按照专业、条理清晰的行政格式生成回复。`;
+          }
+
+          let systemInstruction = `You are "xiaoxiaobo AIpro", a world-class smart conference assistant.`;
+          if (settings.knowledgeBase) {
+              systemInstruction += `\n\nUSER PREFERENCES / BACKGROUND:\n${settings.knowledgeBase}`;
+          }
+
+          const reply = await generateChatResponse(settings, userQuery, systemInstruction);
           const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: reply, timestamp: Date.now() };
+          
           setMeetings(prev => prev.map(m => m.id === activeMeeting.id ? { ...m, chatHistory: [...(m.chatHistory || []), aiMsg] } : m));
       } catch (e) {
           console.error(e);
@@ -288,7 +319,7 @@ const App: React.FC = () => {
 
   const handlePortalClick = (view: View) => {
       if (view === View.MEETING_LIST) {
-          setCurrentMeetingId(null); // 进入智能会议时，默认显示列表，清除上次选中的会议
+          setCurrentMeetingId(null); 
       }
       setCurrentView(view);
   };
@@ -305,7 +336,7 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen bg-[#f3f4f6] font-sans flex flex-col">
             <header className="py-16 px-10 flex flex-col items-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6 border border-white/20">X</div>
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6 border border-white/20">X</div>
                 <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">小小博 AIpro 工作助手</h1>
                 <p className="text-slate-500 text-lg font-medium">高效 · 智能 · 极简全能数字化工作门户</p>
                 <div className="mt-6 flex gap-4">
@@ -334,7 +365,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (currentView === View.ASSET_MANAGER) return <AssetManagerView onBack={() => setCurrentView(View.HOME)} />;
+  if (currentView === View.ASSET_MANAGER) return <AssetManagerView onBack={() => setCurrentView(View.HOME)} settings={settings} />;
   if (currentView === View.PROJECT_MANAGER) return <ProjectManagerView onBack={() => setCurrentView(View.HOME)} />;
   if (currentView === View.DAILY_SCHEDULE) return (
       <div className="h-screen flex flex-col bg-white">
@@ -430,12 +461,12 @@ const App: React.FC = () => {
                         </div>
                     )}
                     {currentView === View.PARTICIPANTS && <ParticipantsView participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} settings={settings} />}
-                    {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={a => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} meetingInfo={activeMeeting.info} setMeetingInfo={i => updateActiveMeeting(m => ({...m, info: i}))} />}
+                    {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={a => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingInfo={activeMeeting.info} setMeetingInfo={i => updateActiveMeeting(m => ({...m, info: i}))} />}
                     {currentView === View.TABLE_CARDS && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
                     {currentView === View.PPT_CREATOR && <PPTCreatorView slides={activeMeeting.pptSlides} setSlides={s => updateActiveMeeting(m => ({...m, pptSlides: s}))} settings={settings} topic={activeMeeting.info.topic} />}
                     {currentView === View.SIGN_IN && <SignInView participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingTopic={activeMeeting.info.topic} />}
                     {currentView === View.FILES && <FilesView files={activeMeeting.files} setFiles={f => updateActiveMeeting(m => ({...m, files: f}))} />}
-                    {currentView === View.ASSISTANT && <AssistantView settings={settings} messages={activeMeeting.chatHistory || []} onSendMessage={handleAssistantSend} isThinking={assistantThinking} onSaveSettings={handleSaveSettings} />}
+                    {currentView === View.ASSISTANT && <AssistantView settings={settings} messages={activeMeeting.chatHistory || []} onSendMessage={handleAssistantSend} isThinking={assistantThinking} onSaveSettings={handleSaveSettings} participants={activeMeeting.participants} agenda={activeMeeting.agenda} files={activeMeeting.files} />}
                 </div>
             </>
         )}

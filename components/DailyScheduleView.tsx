@@ -65,12 +65,28 @@ export const DailyScheduleView: React.FC<DailyScheduleViewProps> = ({ settings }
   // Calendar Logic
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
   
-  const calendarDays = [];
-  for (let i = 0; i < firstDayOfMonth; i++) calendarDays.push(null);
-  for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i);
+  // Robust calendar generation to prevent "Invalid array length"
+  const calendarDays = React.useMemo(() => {
+      try {
+          if (isNaN(year) || isNaN(month)) throw new Error("Invalid Date");
+
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+          const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0-6
+          
+          // Ensure valid positive integers for array lengths
+          const safePadding = Math.max(0, isNaN(firstDayOfMonth) ? 0 : firstDayOfMonth); 
+          const safeDays = Math.max(1, isNaN(daysInMonth) ? 30 : daysInMonth);
+
+          const padding = Array(safePadding).fill(null);
+          const days = Array.from({ length: safeDays }, (_, i) => i + 1);
+          return [...padding, ...days];
+      } catch (e) {
+          console.error("Calendar generation error:", e);
+          // Fallback calendar
+          return Array.from({ length: 30 }, (_, i) => i + 1);
+      }
+  }, [year, month]);
 
   const getTasksForDay = (day: number | null) => {
       if (!day) return [];

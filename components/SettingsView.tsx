@@ -1,12 +1,26 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { Save, Server, Cpu, KeyRound, CheckCircle2, XCircle, Loader2, Play, BookOpen, ExternalLink, HelpCircle, FileText, ChevronRight } from 'lucide-react';
-import { fetchSiliconFlowModels } from '../services/aiService';
+import { fetchSiliconFlowModels, generateChatResponse } from '../services/aiService';
 
 interface SettingsViewProps {
   settings: AppSettings;
   onSave: (newSettings: AppSettings) => void;
 }
+
+// Fallback models in case API fetch fails (401/Offline) or returns empty
+const DEFAULT_SF_MODELS = [
+    "deepseek-ai/DeepSeek-V3",
+    "deepseek-ai/DeepSeek-R1",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-VL-72B-Instruct", // High Capability Vision
+    "THUDM/glm-4-9b-chat",
+    "01-ai/Yi-1.5-34B-Chat-16K"
+];
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) => {
   const [formData, setFormData] = useState<AppSettings>(settings);
@@ -16,7 +30,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
   // Test State
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{success: boolean, msg: string} | null>(null);
-  const [sfModels, setSfModels] = useState<string[]>([]);
+  const [sfModels, setSfModels] = useState<string[]>(DEFAULT_SF_MODELS); // Init with defaults
 
   // Update local state when prop changes
   useEffect(() => {
@@ -42,23 +56,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                    throw new Error("Status: " + res.status);
                }
           } else if (formData.aiProvider === 'siliconflow') {
-               const models = await fetchSiliconFlowModels(formData.siliconFlowKey);
-               setSfModels(models);
-               if (models.length > 0) {
-                   setTestResult({ success: true, msg: `连接成功！已加载 ${models.length} 个可用模型。` });
-                   // Update model selection if current is invalid
-                   if (!formData.siliconFlowModel || !models.includes(formData.siliconFlowModel)) {
-                       setFormData(prev => ({ ...prev, siliconFlowModel: models[0] }));
+               try {
+                   const models = await fetchSiliconFlowModels(formData.siliconFlowKey);
+                   if (models.length > 0) {
+                        setSfModels(models);
+                        setTestResult({ success: true, msg: `连接成功！已加载 ${models.length} 个在线模型。` });
+                        // Update model selection if current is invalid
+                        if (!formData.siliconFlowModel || !models.includes(formData.siliconFlowModel)) {
+                            setFormData(prev => ({ ...prev, siliconFlowModel: models[0] }));
+                        }
+                   } else {
+                       // API connected but no models passed filter - use defaults
+                       console.warn("No models found via API filter, using defaults");
+                       setSfModels(DEFAULT_SF_MODELS);
+                       setTestResult({ success: true, msg: "验证成功！(未检索到列表，已加载默认 Qwen/DeepSeek 模型)" });
                    }
-               } else {
-                   setTestResult({ success: false, msg: "连接成功，但未找到可用的对话模型。" });
+               } catch (e: any) {
+                   // Fallback: Use default list if fetch fails (e.g. 401 or network)
+                   setSfModels(DEFAULT_SF_MODELS);
+                   
+                   const msg = e.message || '';
+                   let friendlyMsg = `连接异常: ${msg}`;
+                   
+                   if (msg.includes('401')) {
+                       friendlyMsg = "API Key 无效 (401)。已启用默认模型列表供配置。";
+                   } else if (msg.includes('ISO-8859-1') || msg.includes('非法字符')) {
+                       friendlyMsg = "API Key 格式错误：包含非法字符（如中文）。请检查并重新输入。";
+                   }
+
+                   setTestResult({ 
+                       success: false, 
+                       msg: friendlyMsg
+                   });
                }
           } else {
-              setTestResult({ success: true, msg: "Gemini 需通过生成内容测试。" });
+              // Gemini Real Connection Test
+              try {
+                  await generateChatResponse(formData, "Hi", "Test");
+                  setTestResult({ success: true, msg: "Gemini 连接成功！(RPC Connected)" });
+              } catch (e: any) {
+                  const errorMsg = e.message || e.toString();
+                  if (errorMsg.includes("RPC") || errorMsg.includes("failed") || errorMsg.includes("Network")) {
+                      throw new Error("Connection failed (RPC). If you are in a restricted region, please use VPN or switch to SiliconFlow/Ollama provider.");
+                  }
+                  throw e;
+              }
           }
       } catch (e: any) {
-          setSfModels([]);
-          setTestResult({ success: false, msg: `连接失败: ${e.message}` });
+          // General Catch
+          setTestResult({ success: false, msg: `${e.message}` });
       } finally {
           setTestingProvider(null);
       }
@@ -186,15 +232,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
             {/* Gemini Config */}
             {formData.aiProvider === 'gemini' && (
               <section className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-3">
-                  <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                      <Server size={20} />
-                  </div>
-                  Gemini 参数配置
-                </h3>
-                <p className="text-sm text-gray-600">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-3">
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                        <Server size={20} />
+                    </div>
+                    Gemini 参数配置
+                    </h3>
+                    <button 
+                        onClick={testConnection}
+                        disabled={!!testingProvider}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                        {testingProvider === 'gemini' ? <Loader2 className="animate-spin" size={14}/> : <Play size={14}/>}
+                        测试连接 (Verify VPN)
+                    </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
                   Gemini API Key 已通过系统环境变量配置，无需在此处手动输入。
                 </p>
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 text-xs text-amber-800">
+                    <p className="font-bold flex items-center gap-2 mb-1"><XCircle size={14}/> 常见问题: RPC Failed</p>
+                    <p>如果遇到 "Connection failed (RPC)" 错误，通常是因为网络环境受限。请确保您的设备已开启 VPN/代理，或切换到 SiliconFlow 服务商。</p>
+                </div>
               </section>
             )}
 
@@ -259,7 +319,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                                 onChange={(e) => {
                                     setFormData({...formData, siliconFlowKey: e.target.value});
                                     setTestResult(null);
-                                    setSfModels([]);
                                 }}
                                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
                                 placeholder="sk-..."
@@ -279,17 +338,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave }) 
                         <select
                             value={formData.siliconFlowModel}
                             onChange={(e) => setFormData({...formData, siliconFlowModel: e.target.value})}
-                            disabled={sfModels.length === 0 && !formData.siliconFlowModel}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent disabled:bg-gray-100"
                         >
-                            {sfModels.length > 0 ? (
-                                sfModels.map(model => <option key={model} value={model}>{model}</option>)
-                            ) : (
-                                <option>{formData.siliconFlowModel || "请先验证有效的 API Key"}</option>
-                            )}
+                            {sfModels.map(model => <option key={model} value={model}>{model}</option>)}
                         </select>
                          <p className="text-xs text-gray-500 mt-1">
-                            支持 DeepSeek-V3, DeepSeek-R1, Qwen 等模型。
+                            支持 DeepSeek-V3, Qwen-2.5, GLM-4 等国产模型。如果列表为空，系统会自动使用默认模型。
                         </p>
                     </div>
                 </div>

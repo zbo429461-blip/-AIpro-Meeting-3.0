@@ -24,6 +24,9 @@ export interface MeetingBasicInfo {
   location: string;
   hostId: string; 
   topic: string;
+  // 新增制位符属性 (单位：mm)
+  nameTabStop?: number; 
+  unitTabStop?: number;
 }
 
 export interface MeetingFile {
@@ -40,6 +43,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  image?: string; // Base64 image data
   timestamp: number;
 }
 
@@ -136,6 +140,7 @@ export interface AssetItem {
   warrantyUntil?: string;
   remarks?: string;
   logs: AssetLog[];
+  sheet?: string; // New property for multi-sheet support
 }
 
 export type TaskPriority = 'high' | 'medium' | 'low';
@@ -172,11 +177,17 @@ export interface Project {
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'date' | 'select' | 'number';
+  type: 'text' | 'textarea' | 'date' | 'select' | 'number' | 'section';
   placeholder?: string;
   options?: string[];
   required?: boolean;
   colSpan?: number; // 1-24
+  rowSpan?: number; // Vertical merge support
+  validationRegex?: string;
+  helpText?: string;
+  defaultValue?: string;
+  readOnly?: boolean;
+  hideLabel?: boolean;
 }
 
 export interface FormTemplate {

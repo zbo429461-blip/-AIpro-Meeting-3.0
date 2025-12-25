@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Participant, AppSettings } from '../types';
 import { formatNameForForm } from '../utils';
@@ -180,10 +181,15 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
         reader.readAsDataURL(file);
         reader.onload = async () => {
             const base64Data = (reader.result as string).split(',')[1];
+            // Ensure mimeType is valid, defaulting to jpeg if empty (common issue with some clipboards/systems)
+            const mimeType = file.type || 'image/jpeg';
             try {
-                const parsedItems = await parseParticipantsFromImage(base64Data, settings);
+                const parsedItems = await parseParticipantsFromImage(base64Data, mimeType, settings);
                 processImportedItems(parsedItems, 'ocr');
-            } catch (err) { alert(`使用 ${aiProviderLabel} 图片识别失败`); } 
+            } catch (err: any) { 
+                console.error("AI Error:", err);
+                alert(`使用 ${aiProviderLabel} 图片识别失败: ${err.message || '未知错误'}`); 
+            } 
             finally { setIsImporting(false); }
         };
     } catch (e) { setIsImporting(false); }

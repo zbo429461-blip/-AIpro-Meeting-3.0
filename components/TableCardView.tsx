@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Participant, CardDesign, AppSettings, CustomElement } from '../types';
 import { Printer, Settings2, Image as ImageIcon, Sparkles, Upload, RotateCw, Palette, Type, Move, LayoutTemplate, PenTool, FileText, UserSquare2, Download, Package, FileDown, Plus, Trash2, Edit3, Minus } from 'lucide-react';
@@ -82,12 +83,27 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
         }).join('');
     };
 
-    const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    const header = `<html xmlns:v="urn:schemas-microsoft-com:vml" 
+        xmlns:o="urn:schemas-microsoft-com:office:office" 
+        xmlns:w="urn:schemas-microsoft-com:office:word" 
+        xmlns:m="http://schemas.microsoft.com/office/2004/12/omml" 
+        xmlns="http://www.w3.org/TR/REC-html40">
     <head>
-        <meta charset='utf-8'>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <title>Table Cards</title>
+        <!--[if gte mso 9]>
+        <xml>
+        <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>100</w:Zoom>
+            <w:DoNotOptimizeForBrowser/>
+        </w:WordDocument>
+        </xml>
+        <![endif]-->
         <style>
-            @page { size: A4 landscape; margin: 0; }
+            @page WordSection1 { size: A4 landscape; margin: 0; }
+            div.WordSection1 { page: WordSection1; }
+            
             body { margin: 0; padding: 0; font-family: '${fontFamily}', serif; }
             table { width: 100%; height: 100vh; border-collapse: collapse; page-break-after: always; table-layout: fixed; }
             td { text-align: center; vertical-align: middle; position: relative; padding: 0; }
@@ -98,7 +114,8 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
             .rotated-cell { filter: progid:DXImageTransform.Microsoft.BasicImage(rotation=2); }
         </style>
     </head>
-    <body>`;
+    <body>
+    <div class="WordSection1">`;
 
     const content = participants.map(p => `
         <table>
@@ -129,7 +146,7 @@ export const TableCardView: React.FC<TableCardViewProps> = ({ participants, sett
         </table>
     `).join('');
 
-    const footer = "</body></html>";
+    const footer = "</div></body></html>";
     const sourceHTML = header + content + footer;
 
     const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
