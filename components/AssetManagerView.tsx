@@ -3,10 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AssetItem, AssetStatus, AssetCategory, AppSettings, AssetLog } from '../types';
 import { 
   Plus, Trash2, Download, Search, Package, ArrowLeftCircle, X, 
-  Filter, Sparkles, Loader2, QrCode, ClipboardCheck, 
+  Sparkles, Loader2, QrCode, 
   ShieldCheck, Wrench, Clock, TrendingUp, AlertTriangle, 
   ArrowUpDown, ArrowUp, ArrowDown, Copy, ListFilter, ScanLine, 
-  Sheet, Save, CheckCircle2, History, PenTool, Layout, MapPin, ArrowRightLeft
+  Sheet, History, MapPin, ArrowRightLeft
 } from 'lucide-react';
 import { utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
 import { parseAssetRequest, parseAssetsFromImage, getAIProviderLabel } from '../services/aiService';
@@ -199,7 +199,7 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
           setAssets(prev => prev.map(a => {
               if (ids.includes(a.id)) {
                   const newLog: AssetLog = {
-                      id: Date.now() + Math.random().toString(),
+                      id: Date.now().toString() + Math.random().toString(),
                       type: 'Transfer',
                       date: new Date().toLocaleDateString(),
                       operator: 'Admin',
@@ -344,9 +344,15 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
     });
     if (sortConfig) {
         result.sort((a, b) => {
-            const aVal = a[sortConfig.key] || '';
-            const bVal = b[sortConfig.key] || '';
-            if (sortConfig.key === 'price') return sortConfig.direction === 'asc' ? parseFloat(a.price) - parseFloat(b.price) : parseFloat(b.price) - parseFloat(a.price);
+            // Type assertion here prevents build errors
+            const aVal = (a as any)[sortConfig.key] || '';
+            const bVal = (b as any)[sortConfig.key] || '';
+            
+            if (sortConfig.key === 'price') {
+                return sortConfig.direction === 'asc' 
+                    ? parseFloat(a.price) - parseFloat(b.price) 
+                    : parseFloat(b.price) - parseFloat(a.price);
+            }
             if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
