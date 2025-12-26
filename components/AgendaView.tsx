@@ -4,7 +4,7 @@ import { AgendaItem, AppSettings, MeetingBasicInfo, Participant } from '../types
 import { formatNameForAgenda } from '../utils';
 import { generateAgenda, getAIProviderLabel } from '../services/aiService';
 import { Wand2, Calendar, Clock, MapPin, User, Loader2, FileText, Eye, Edit2, Plus, Trash2, Settings2, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, ArrowLeftRight, Ruler, Download, Printer, LayoutTemplate, AlignJustify, ZoomIn, ZoomOut } from 'lucide-react';
-import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun, AlignmentType, BorderStyle, TableLayoutType } from 'docx';
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun, AlignmentType, BorderStyle, TableLayoutType, LineRuleType } from 'docx';
 import saveAs from 'file-saver';
 
 interface AgendaViewProps {
@@ -152,7 +152,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
          };
          
          // Helper for Paragraph Spacing
-         const paraSpacing = { line: Math.round(lineHeight * 240), lineRule: "auto", after: 0 }; 
+         const paraSpacing = { line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO, after: 0 }; 
 
          // Calculate Total Page Width in DXA (170mm approx)
          const mmToDxa = (mm: number) => Math.floor(mm * 56.6929);
@@ -256,19 +256,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
                     new Paragraph({
                         children: createMultiLineText(`${currentInfo.topic || "会议"}议程`, true, h1Size),
                         alignment: AlignmentType.CENTER,
-                        spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" },
+                        spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO },
                     }),
-                    new Paragraph({ children: createMultiLineText(`一、会议时间：${currentInfo.date || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`二、会议地点：${currentInfo.location || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`三、主持人：${hostDisplay}`, true, h2Size), spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`四、会议议程`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
+                    new Paragraph({ children: createMultiLineText(`一、会议时间：${currentInfo.date || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO } }),
+                    new Paragraph({ children: createMultiLineText(`二、会议地点：${currentInfo.location || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO } }),
+                    new Paragraph({ children: createMultiLineText(`三、主持人：${hostDisplay}`, true, h2Size), spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO } }),
+                    new Paragraph({ children: createMultiLineText(`四、会议议程`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO } }),
                     new Table({
                         rows: agendaTableRows,
                         width: { size: pageWidthDxa, type: WidthType.DXA },
                         borders: tableBorders,
                     }),
                     new Paragraph({ text: "", spacing: { after: 400 } }), 
-                    new Paragraph({ children: createMultiLineText(`五、参会人员`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
+                    new Paragraph({ children: createMultiLineText(`五、参会人员`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: LineRuleType.AUTO } }),
                     new Table({
                         rows: participantTableRows,
                         width: { size: pageWidthDxa, type: WidthType.DXA },

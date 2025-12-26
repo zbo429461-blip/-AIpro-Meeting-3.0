@@ -122,9 +122,19 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, retries = 3, del
     try {
         return await operation();
     } catch (error: any) {
-        const msg = error.toString().toLowerCase();
+        const msg = (error.message || error.toString()).toLowerCase();
         // Check for common transient errors: RPC failed, Fetch failed, or 503/504/429 status codes
-        if (retries > 0 && (msg.includes("rpc") || msg.includes("fetch") || msg.includes("503") || msg.includes("504") || msg.includes("429") || msg.includes("network") || msg.includes("aborted"))) {
+        // Also handling 'NetworkError' and 'Load failed' which are common in browser
+        if (retries > 0 && (
+            msg.includes("rpc") || 
+            msg.includes("fetch") || 
+            msg.includes("network") || 
+            msg.includes("aborted") ||
+            msg.includes("load failed") ||
+            msg.includes("503") || 
+            msg.includes("504") || 
+            msg.includes("429")
+        )) {
             console.warn(`Transient API Error (${msg}), retrying in ${delay}ms... Attempts left: ${retries}`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return retryWithBackoff(operation, retries - 1, delay * 2); // Exponential backoff
@@ -270,8 +280,16 @@ const generateContentWithProvider = async (
         const textResponse = response.text || '';
         return isJsonMode ? extractJson(textResponse) : textResponse;
       } catch (e: any) {
-        if (e.toString().includes("Rpc failed") || e.toString().includes("fetch failed") || e.toString().includes("NetworkError")) {
-           throw new Error("Connection failed (RPC). If you are in a restricted region, please use VPN or switch to SiliconFlow/Ollama provider.");
+        const msg = (e.message || e.toString()).toLowerCase();
+        // More specific error handling
+        if (msg.includes("rpc") || msg.includes("fetch failed") || msg.includes("networkerror")) {
+           throw new Error("Google Gemini Connection Failed (RPC/Network). Please ensure you have a valid VPN/Proxy connected if you are in a restricted region, or check your internet connection.");
+        }
+        if (msg.includes("403") || msg.includes("permission denied")) {
+            throw new Error("Gemini API Key Permission Denied. Please check your API Key status in Google AI Studio.");
+        }
+        if (msg.includes("400") || msg.includes("invalid argument")) {
+            throw new Error("Gemini API Invalid Request. Please check your inputs.");
         }
         throw e;
       }
@@ -283,8 +301,19 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
   const systemInstruction = `You are an Advanced Visual Document Intelligence Engine (vLLM).
   **CORE TASKS**:
   1. **Preprocessing Analysis**: Mentally perform binarization and deskewing to read the layout accurately.
-  2. **Coordinate & Topology**: Analyze the spatial coordinates of text blocks to understand form structure (columns, rows, sections). Preserver the logical reading order.
+  2. **Coordinate & Topology**: Analyze the spatial coordinates of text blocks. **CRITICAL**: Maintain the horizontal arrangement of fields.
   3. **Schema Extraction**: Reconstruct the form's logical schema into JSON.
+  
+  **GRID SYSTEM RULES (CRITICAL)**:
+  - The form is a 24-column grid.
+  - You MUST calculate \`colSpan\` based on the visual width of the field relative to the page width.
+  - **Horizontal Alignment**: If Field A and Field B are side-by-side in the image, their \`colSpan\` values MUST sum to roughly 24 (e.g., 12+12, or 8+8+8 for 3 items).
+  - **Do NOT** assign \`colSpan: 24\` to every field unless it actually spans the full width of the page.
+  - **Table Structure**: If you see a table, reproduce it using the grid. Row headers are fields. Cells are fields.
+  
+  **FIELD RECOGNITION**:
+  - A "Field" usually consists of a Label (e.g., "Name:") and an Input Area (underlined space, box, or empty cell). 
+  - Combine Label and Input into a SINGLE field object. Do not create separate fields for the label and the value unless it is a table header.
   
   **OUTPUT JSON SCHEMA**:
   {
@@ -295,12 +324,12 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
         "id": "gen_id_1",
         "label": "Field Label",
         "type": "text|textarea|date|number|section",
-        "colSpan": 1-24 (width relative to a 24-col grid),
-        "rowSpan": 1-10,
+        "colSpan": 1-24, 
+        "rowSpan": 1-10, 
         "defaultValue": "Handwritten content or empty",
         "required": boolean,
-        "readOnly": boolean,
-        "hideLabel": boolean
+        "readOnly": boolean, // Set to true if it's a fixed text block or header without input
+        "hideLabel": boolean // Set to true if the label is integrated into the layout visually
       }
     ]
   }
@@ -317,6 +346,7 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
           if (ocrText && ocrText.length > 50) {
               // OCR Successful, pass text to LLM
               const prompt = `Analyze this OCR result representing a form and convert it to the specified JSON schema. 
+              **LAYOUT HINT**: If multiple items appear on the same line in the text, assign them partial colSpans (e.g. 12 and 12) to fit on one row in a 24-col grid.
               
               OCR CONTENT:
               ${ocrText}
@@ -331,7 +361,7 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
   }
 
   // Standard VLM Logic (Gemini / Qwen-VL / SiliconFlow)
-  const contents = { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Extract form structure to JSON with high spatial accuracy." }] };
+  const contents = { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Extract form structure to JSON with high spatial accuracy. Respect horizontal layouts." }] };
   const config = { responseMimeType: "application/json", model: 'gemini-3-pro-preview' };
   
   const res = await generateContentWithProvider(settings, contents, config, systemInstruction);
@@ -349,6 +379,7 @@ export const parseFormFromExcelData = async (data: any[][], settings: AppSetting
   2. [Cell Matching]: Map columns to field definitions.
   3. [Topology]: Detect logical row/column spans.
   4. [Output]: Convert to Form Template JSON with colSpan (1-24) and rowSpan.
+     *IMPORTANT*: Ensure the colSpans in a row sum up to 24 to maintain layout.
   Data: ${JSON.stringify(data.slice(0, 10))}`;
   const res = await generateContentWithProvider(settings, prompt, { responseMimeType: "application/json" });
   try {

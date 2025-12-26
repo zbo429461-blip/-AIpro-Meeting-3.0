@@ -1,19 +1,27 @@
-
-// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { View, Participant, AgendaItem, AppSettings, MeetingBasicInfo, Meeting, MeetingFile, PPTSlide, ChatMessage } from './types';
-import { ParticipantsView } from './components/ParticipantsView';
-import { AgendaView } from './components/AgendaView';
-import { TableCardView } from './components/TableCardView';
-import { SettingsView } from './components/SettingsView';
-import { AssistantView } from './components/AssistantView';
-import { SignInView } from './components/SignInView';
-import { FilesView } from './components/FilesView'; 
-import { PPTCreatorView } from './components/PPTCreatorView';
-import { AssetManagerView } from './components/AssetManagerView';
-import { FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, MessageSquare, Sparkles, AlertTriangle, Presentation, Briefcase, FormInput, LayoutGrid, ArrowLeftCircle } from 'lucide-react';
-import { parseMeetingRequest, generateChatResponse } from './services/aiService';
+import { Sidebar } from './Sidebar';
+import { View, Participant, AgendaItem, AppSettings, MeetingBasicInfo, Meeting, MeetingFile, PPTSlide, ChatMessage } from '../types';
+import { ParticipantsView } from './ParticipantsView';
+import { AgendaView } from './AgendaView';
+import { TableCardView } from './TableCardView';
+import { SettingsView } from './SettingsView';
+import { AssistantView } from './AssistantView';
+import { SignInView } from './SignInView';
+import { FilesView } from './FilesView'; 
+import { PPTCreatorView } from './PPTCreatorView';
+import { AssetManagerView } from './AssetManagerView';
+import { ProjectManagerView } from './ProjectManagerView';
+import { FormsView } from './FormsView';
+import { DailyScheduleView } from './DailyScheduleView';
+import { 
+  FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, 
+  ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, 
+  MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, 
+  ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, 
+  MessageSquare, Sparkles, AlertTriangle, Presentation, Briefcase, 
+  FormInput, LayoutGrid, ArrowLeftCircle 
+} from 'lucide-react';
+import { parseMeetingRequest, generateChatResponse } from '../services/aiService';
 
 // Speech Recognition Types
 declare global {
@@ -22,7 +30,6 @@ declare global {
   }
 }
 
-// ... WorkflowOverlay component (unchanged) ...
 const WorkflowOverlay = ({ step, data, onClose, onExecute, inputMode, setInputMode, onTextSubmit }: { 
     step: number, 
     data: any, 
@@ -184,7 +191,7 @@ const App: React.FC = () => {
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   
   const [settings, setSettings] = useState<AppSettings>({
-    aiProvider: 'gemini',
+    aiProvider: 'siliconflow', // Changed Default to SiliconFlow to avoid RPC errors in CN
     geminiKey: '',
     ollamaUrl: 'http://localhost:11434',
     ollamaModel: 'llama3',
@@ -404,7 +411,6 @@ const App: React.FC = () => {
   if (currentView === View.HOME) {
       return (
           <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans">
-              {/* ... Home View Content (Same as before) ... */}
               <div className="max-w-4xl w-full px-6 text-center">
                   <div className="mb-12">
                       <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6">X</div>
@@ -435,7 +441,35 @@ const App: React.FC = () => {
       );
   }
 
-  if (currentView === View.ASSET_MANAGER) return <AssetManagerView onBack={() => setCurrentView(View.HOME)} />;
+  if (currentView === View.ASSET_MANAGER) return <AssetManagerView onBack={() => setCurrentView(View.HOME)} settings={settings} />;
+  if (currentView === View.PROJECT_MANAGER) return <ProjectManagerView onBack={() => setCurrentView(View.HOME)} />;
+  if (currentView === View.DAILY_SCHEDULE) return (
+      <div className="h-screen flex flex-col bg-white">
+          <div className="bg-white border-b px-8 py-4 flex items-center gap-4 sticky top-0 z-50">
+              <button onClick={() => setCurrentView(View.HOME)} className="text-gray-400 hover:text-indigo-600 transition-colors"><ArrowLeftCircle size={28}/></button>
+              <h1 className="text-xl font-bold text-slate-900">智能日历排期</h1>
+          </div>
+          <div className="flex-1 overflow-auto"><DailyScheduleView settings={settings} /></div>
+      </div>
+  );
+  if (currentView === View.FORMS) return (
+      <div className="h-screen flex flex-col bg-white">
+          <div className="bg-white border-b px-8 py-4 flex items-center gap-4 sticky top-0 z-50">
+              <button onClick={() => setCurrentView(View.HOME)} className="text-gray-400 hover:text-indigo-600 transition-colors"><ArrowLeftCircle size={28}/></button>
+              <h1 className="text-xl font-bold text-slate-900">电子表单中心</h1>
+          </div>
+          <div className="flex-1 overflow-auto"><FormsView settings={settings} /></div>
+      </div>
+  );
+  if (currentView === View.SETTINGS) return (
+    <div className="h-screen flex flex-col bg-white">
+        <div className="bg-white border-b px-8 py-4 flex items-center gap-4 sticky top-0 z-50">
+            <button onClick={() => setCurrentView(View.HOME)} className="text-gray-400 hover:text-indigo-600 transition-colors"><ArrowLeftCircle size={28}/></button>
+            <h1 className="text-xl font-bold text-slate-900">系统全局设置</h1>
+        </div>
+        <div className="flex-1 overflow-auto"><SettingsView settings={settings} onSave={handleSaveSettings} /></div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] text-gray-800 font-sans">
@@ -515,6 +549,7 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-auto bg-[#f8f9fa]">
                     {currentView === View.PARTICIPANTS && <ParticipantsView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} settings={settings} />}
                     {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={(a) => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingInfo={activeMeeting.info} setMeetingInfo={(i) => updateActiveMeeting(m => ({...m, info: i}))} />}
+                    {currentView === View.TABLE_Card && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
                     {currentView === View.TABLE_CARDS && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
                     {currentView === View.PPT_CREATOR && <PPTCreatorView slides={activeMeeting.pptSlides} setSlides={(s) => updateActiveMeeting(m => ({...m, pptSlides: s}))} settings={settings} topic={activeMeeting.info.topic} />}
                     {currentView === View.SIGN_IN && <SignInView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingTopic={activeMeeting.info.topic} />}
@@ -573,3 +608,5 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+export default App;

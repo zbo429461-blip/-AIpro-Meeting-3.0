@@ -2,6 +2,6 @@
   "requestFramePermissions": [
     "microphone"
   ],
-  "name": "小小博的AIpro工作助手 3.5.1",
-  "description": "集成 Ollama、硅基流动及 Gemini 的多模态智能工作会议助手"
+  "name": "小小博的AIpro工作助手 4.0.0",
+  "description": "集成 Ollama、硅基流动(DeepSeek/Qwen) 及 Gemini 的多模态智能工作会议助手"
 }
