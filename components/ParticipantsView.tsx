@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Participant, AppSettings } from '../types';
 import { formatNameForForm } from '../utils';
 import { translateParticipantInfo, parseParticipantsFromImage, parseParticipantsFromText, getAIProviderLabel } from '../services/aiService';
-import { read, utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
+import { read, utils, writeFile } from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 import { Search, Plus, Download, Upload, Trash2, Globe, Sparkles, X, Check, Users, FileSpreadsheet, History, Save, Camera, FileType } from 'lucide-react';
 
 interface ParticipantsViewProps {

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { AgendaItem, AppSettings, MeetingBasicInfo, Participant } from '../types';
 import { formatNameForAgenda } from '../utils';
@@ -152,7 +151,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
          };
          
          // Helper for Paragraph Spacing
-         const paraSpacing = { line: Math.round(lineHeight * 240), lineRule: "auto", after: 0 }; 
+         const paraSpacing = { line: Math.round(lineHeight * 240), lineRule: "auto" as const, after: 0 }; 
 
          // Calculate Total Page Width in DXA (170mm approx)
          const mmToDxa = (mm: number) => Math.floor(mm * 56.6929);
@@ -256,19 +255,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ agenda, setAgenda, setti
                     new Paragraph({
                         children: createMultiLineText(`${currentInfo.topic || "会议"}议程`, true, h1Size),
                         alignment: AlignmentType.CENTER,
-                        spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" },
+                        spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" as const },
                     }),
-                    new Paragraph({ children: createMultiLineText(`一、会议时间：${currentInfo.date || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`二、会议地点：${currentInfo.location || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`三、主持人：${hostDisplay}`, true, h2Size), spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
-                    new Paragraph({ children: createMultiLineText(`四、会议议程`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
+                    new Paragraph({ children: createMultiLineText(`一、会议时间：${currentInfo.date || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" as const } }),
+                    new Paragraph({ children: createMultiLineText(`二、会议地点：${currentInfo.location || '待定'}`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" as const } }),
+                    new Paragraph({ children: createMultiLineText(`三、主持人：${hostDisplay}`, true, h2Size), spacing: { after: 400, line: Math.round(lineHeight * 240), lineRule: "auto" as const } }),
+                    new Paragraph({ children: createMultiLineText(`四、会议议程`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" as const } }),
                     new Table({
                         rows: agendaTableRows,
                         width: { size: pageWidthDxa, type: WidthType.DXA },
                         borders: tableBorders,
                     }),
                     new Paragraph({ text: "", spacing: { after: 400 } }), 
-                    new Paragraph({ children: createMultiLineText(`五、参会人员`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" } }),
+                    new Paragraph({ children: createMultiLineText(`五、参会人员`, true, h2Size), spacing: { after: 200, line: Math.round(lineHeight * 240), lineRule: "auto" as const } }),
                     new Table({
                         rows: participantTableRows,
                         width: { size: pageWidthDxa, type: WidthType.DXA },
