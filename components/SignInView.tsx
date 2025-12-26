@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Participant } from '../types';
 import { CheckCircle2, Circle, Search, Clock, Download, QrCode, X } from 'lucide-react';
-import { utils, writeFile } from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
+import { utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
 
 interface SignInViewProps {
   participants: Participant[];
