@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { FormTemplate, FormField, FormSubmission, AppSettings } from '../types';
 import { 
@@ -9,7 +10,6 @@ import {
   Layers, Zap, Network, FormInput
 } from 'lucide-react';
 import { parseFormFromDocument, parseFormFromExcelData, getAIProviderLabel } from '../services/aiService';
-import { utils, read, writeFile } from 'xlsx';
 import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, BorderStyle, TextRun, AlignmentType, VerticalAlign, ShadingType, VerticalMergeType, TableLayoutType, HeightRule } from 'docx';
 import saveAs from 'file-saver';
 
@@ -107,6 +107,7 @@ export const FormsView: React.FC<FormsViewProps> = ({ settings }) => {
               if (mobileStepTimerRef.current) clearInterval(mobileStepTimerRef.current);
               setScanStep(3); 
               
+              const { read, utils } = (window as any).XLSX;
               const workbook = read(data);
               const result = await parseFormFromExcelData(utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }) as any[][], settings);
               

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Participant, AppSettings } from '../types';
 import { formatNameForForm } from '../utils';
 import { translateParticipantInfo, parseParticipantsFromImage, parseParticipantsFromText, getAIProviderLabel } from '../services/aiService';
-import { read, utils, writeFile } from 'xlsx';
 import { Search, Plus, Download, Upload, Trash2, Globe, Sparkles, X, Check, Users, FileSpreadsheet, History, Save, Camera, FileType } from 'lucide-react';
 
 interface ParticipantsViewProps {
@@ -147,6 +146,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
     setIsImporting(true);
     try {
         const data = await file.arrayBuffer();
+        const { read, utils } = (window as any).XLSX;
         const workbook = read(data);
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = utils.sheet_to_json(sheet, { header: 1 }) as any[][];
@@ -165,7 +165,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
         });
         processImportedItems(newItems, 'excel');
     } catch (error) {
-        alert("文件读取失败。");
+        alert("文件读取失败，请确保Excel文件格式正确。");
     } finally {
         setIsImporting(false);
         e.target.value = '';
@@ -208,6 +208,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
   };
 
   const handleExportExcel = () => {
+     const { utils, writeFile } = (window as any).XLSX;
      const wb = utils.book_new();
      const wsData = [
          ["填写提示:\n1. 手机号用于接收会议短信提醒\n2. “外文姓名”和“单位外文名称”均用于制作电子桌牌"], 

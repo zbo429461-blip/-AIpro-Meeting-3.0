@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Participant } from '../types';
 import { CheckCircle2, Circle, Search, Clock, Download, QrCode, X } from 'lucide-react';
-import { utils, writeFile } from 'xlsx';
 
 interface SignInViewProps {
   participants: Participant[];
@@ -24,6 +23,7 @@ export const SignInView: React.FC<SignInViewProps> = ({ participants, setPartici
   };
 
   const handleExportSignInSheet = () => {
+      const { utils, writeFile } = (window as any).XLSX;
       const data = participants.map(p => ({
           "姓名": p.nameCN,
           "单位": p.unitCN,

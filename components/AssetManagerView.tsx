@@ -8,7 +8,6 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Copy, ListFilter, ScanLine, 
   Sheet, History, MapPin, ArrowRightLeft
 } from 'lucide-react';
-import { utils, writeFile } from 'xlsx';
 import { parseAssetRequest, parseAssetsFromImage, getAIProviderLabel } from '../services/aiService';
 
 interface AssetManagerViewProps {
@@ -315,6 +314,7 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
   };
 
   const handleExportSheet = () => {
+      const { utils, writeFile } = (window as any).XLSX;
       const sheetData = assets
           .filter(a => a.sheet === activeSheet)
           .map(a => ({
