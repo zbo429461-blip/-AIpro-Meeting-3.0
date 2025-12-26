@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Participant, AppSettings } from '../types';
 import { formatNameForForm } from '../utils';
 import { translateParticipantInfo, parseParticipantsFromImage, parseParticipantsFromText, getAIProviderLabel } from '../services/aiService';
-import { read, utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
+import { read, utils, writeFile } from 'xlsx';
 import { Search, Plus, Download, Upload, Trash2, Globe, Sparkles, X, Check, Users, FileSpreadsheet, History, Save, Camera, FileType } from 'lucide-react';
 
 interface ParticipantsViewProps {
@@ -280,7 +280,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
                          {/* Excel Import */}
                         <div className="border border-gray-200 rounded-xl p-4 hover:border-green-400 transition-colors bg-gray-50 flex flex-col justify-between">
                             <div>
-                                <h4 className="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                                <h4 className="font-bold text-gray-800 flex items-center gap-2">
                                     <FileSpreadsheet size={18} className="text-green-600"/> Excel 导入
                                 </h4>
                                 <p className="text-xs text-gray-500 mb-2">标准模板导入</p>
@@ -294,7 +294,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
                         {/* Image OCR Import */}
                         <div className="border border-gray-200 rounded-xl p-4 hover:border-blue-400 transition-colors bg-gray-50 flex flex-col justify-between">
                              <div>
-                                <h4 className="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                                <h4 className="font-bold text-gray-800 flex items-center gap-2">
                                     <Camera size={18} className="text-blue-600"/> 图片识别
                                 </h4>
                                 <p className="text-xs text-gray-500 mb-2">拍照/截图导入</p>
@@ -308,7 +308,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({ participants
                         {/* Text AI Import */}
                          <div className="border border-gray-200 rounded-xl p-4 hover:border-purple-400 transition-colors bg-gray-50 flex flex-col justify-between">
                              <div>
-                                <h4 className="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                                <h4 className="font-bold text-gray-800 flex items-center gap-2">
                                     <FileType size={18} className="text-purple-600"/> 文本识别
                                 </h4>
                                 <p className="text-xs text-gray-500 mb-2">粘贴任意文本</p>

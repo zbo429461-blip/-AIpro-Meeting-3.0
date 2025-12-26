@@ -8,7 +8,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Copy, ListFilter, ScanLine, 
   Sheet, History, MapPin, ArrowRightLeft
 } from 'lucide-react';
-import { utils, writeFile } from 'https://esm.sh/xlsx@0.18.5';
+import { utils, writeFile } from 'xlsx';
 import { parseAssetRequest, parseAssetsFromImage, getAIProviderLabel } from '../services/aiService';
 
 interface AssetManagerViewProps {
