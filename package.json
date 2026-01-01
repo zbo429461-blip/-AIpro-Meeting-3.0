@@ -11,8 +11,8 @@
   "dependencies": {
     "@google/genai": "^1.34.0",
     "react": "^19.2.3",
-    "lucide-react": "^0.561.0",
     "react-dom": "^19.2.3",
+    "lucide-react": "^0.561.0",
     "html2canvas": "1.4.1",
     "jszip": "3.10.1",
     "file-saver": "2.0.5",

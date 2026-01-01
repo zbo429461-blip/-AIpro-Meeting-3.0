@@ -14,18 +14,16 @@ import { AssetManagerView } from './AssetManagerView';
 import { ProjectManagerView } from './ProjectManagerView';
 import { FormsView } from './FormsView';
 import { DailyScheduleView } from './DailyScheduleView';
-import { KnowledgeBaseView } from './KnowledgeBaseView'; // Import new view
+import { KnowledgeBaseView } from './KnowledgeBaseView'; 
 import { 
   Plus, Trash2, Mic, Cpu, CheckCircle2, 
   Code, Play, Keyboard, MousePointerClick, Sparkles, 
   AlertTriangle, Presentation, Briefcase, FormInput, 
   ArrowLeftCircle, Clock, Users, X, Loader2, 
-  CalendarDays, KanbanSquare, ClipboardCheck, ArrowRight, Settings, Grid, Calendar,
-  BarChart3, UserCircle2, Edit, LogIn, Database
+  CalendarDays, KanbanSquare, ClipboardCheck, ArrowRight, Settings, Grid, Calendar, Database, Edit
 } from 'lucide-react';
 import { parseMeetingRequest, generateChatResponse } from '../services/aiService';
 
-// Speech Recognition Types
 declare global {
   interface Window {
     webkitSpeechRecognition: any;
@@ -237,17 +235,6 @@ const App: React.FC = () => {
       setCurrentView(View.DASHBOARD);
   };
 
-  const confirmCreateMeeting = () => {
-      createMeeting(newMeetingName);
-      setShowCreateModal(false);
-      setNewMeetingName('');
-  };
-
-  const handleCreateClick = () => {
-      setNewMeetingName('');
-      setShowCreateModal(true);
-  };
-
   const activeMeeting = meetings.find(m => m.id === currentMeetingId);
 
   const updateActiveMeeting = (updater: (m: Meeting) => Meeting) => {
@@ -264,30 +251,7 @@ const App: React.FC = () => {
       setAssistantThinking(true);
       
       try {
-          // Optimized Summarization & Context Injection
           let userQuery = text;
-          const summarizationKeywords = ["会议纪要", "总结", "summarize", "整理", "记录", "整理", "纪要", "归纳", "笔记", "minutes", "highlights"];
-          
-          if (summarizationKeywords.some(k => text.toLowerCase().includes(k))) {
-              let summaryContext = `\n\n--- [系统自动同步: 当前会议核心数据] ---\n`;
-              summaryContext += `【会议概况】\n- 主题: ${activeMeeting.info.topic}\n- 时间: ${activeMeeting.info.date}\n- 地点: ${activeMeeting.info.location || '待定'}\n`;
-              
-              if (activeMeeting.participants.length > 0) {
-                  const signedIn = activeMeeting.participants.filter(p => p.isSignedIn).length;
-                  summaryContext += `【参会情况】\n- 参会人数: ${activeMeeting.participants.length} 人 (已签到 ${signedIn} 人)\n- 名单: ${activeMeeting.participants.map(p => `${p.nameCN} (${p.unitCN})`).join(', ')}\n`;
-              }
-              
-              if (activeMeeting.agenda.length > 0) {
-                  summaryContext += `【议程安排】\n${activeMeeting.agenda.map(a => `- [${a.time}] ${a.title} (负责人/发言人: ${a.speaker || '未指定'})`).join('\n')}\n`;
-              }
-              
-              if (activeMeeting.files && activeMeeting.files.length > 0) {
-                  summaryContext += `【参考资料】\n- 附件列表: ${activeMeeting.files.map(f => f.name).join(', ')}\n`;
-              }
-              
-              userQuery = `${text}\n\n${summaryContext}\n\n[指令]: 请结合以上结构化会议数据，按照专业、条理清晰的行政格式生成回复。`;
-          }
-
           let systemInstruction = `You are "xiaoxiaobo AIpro", a world-class smart conference assistant.`;
           if (settings.knowledgeBase) {
               systemInstruction += `\n\nUSER PREFERENCES / BACKGROUND:\n${settings.knowledgeBase}`;
@@ -466,12 +430,12 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex gap-4">
                         <button onClick={startSmartBooking} className="px-6 py-2.5 bg-white border border-indigo-200 text-indigo-600 rounded-xl shadow-sm flex items-center gap-2 font-bold hover:bg-indigo-50 transition-colors"><Sparkles size={18}/> 智能预约</button>
-                        <button onClick={handleCreateClick} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl shadow-md flex items-center gap-2 font-bold hover:bg-indigo-700 transition-colors"><Plus size={18}/> 创建新会议</button>
+                        <button onClick={() => { setNewMeetingName(''); setShowCreateModal(true); }} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl shadow-md flex items-center gap-2 font-bold hover:bg-indigo-700 transition-colors"><Plus size={18}/> 创建新会议</button>
                     </div>
                 </header>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                     {meetings.map(m => (
-                        <div key={m.id} onClick={() => selectMeeting(m.id)} className="p-8 bg-white rounded-[2rem] border border-gray-200 shadow-sm hover:shadow-xl hover:border-indigo-200 cursor-pointer relative group transition-all transform hover:-translate-y-1">
+                        <div key={m.id} onClick={() => { setCurrentMeetingId(m.id); setCurrentView(View.DASHBOARD); }} className="p-8 bg-white rounded-[2rem] border border-gray-200 shadow-sm hover:shadow-xl hover:border-indigo-200 cursor-pointer relative group transition-all transform hover:-translate-y-1">
                             <button onClick={(e) => { e.stopPropagation(); deleteMeeting(m.id); }} className="absolute -top-3 -right-3 p-2.5 bg-white shadow-lg rounded-full text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 border border-gray-100"><Trash2 size={16}/></button>
                             <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">{m.info.date}</span>
                             <div className="flex justify-between items-start mt-2">

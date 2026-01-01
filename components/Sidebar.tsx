@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { View } from '../types';
-import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle, Presentation, FileSignature, LayoutList } from 'lucide-react';
+import { Users, Calendar, FileText, Settings, Home, CreditCard, Sparkles, ChevronLeft, ChevronRight, ClipboardCheck, ArrowLeftCircle, Presentation, FileSignature, LayoutList, Database } from 'lucide-react';
 
 interface SidebarProps {
   currentView: View;
@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, col
   const menuItems = [
     { id: View.DASHBOARD, label: '工作台概览 Dashboard', icon: Home },
     { id: View.ASSISTANT, label: '智能办公助手 AI Assistant', icon: Sparkles },
+    { id: View.KNOWLEDGE_BASE, label: '本地知识库 RAG Knowledge', icon: Database },
     { id: View.PARTICIPANTS, label: '参会人员管理 Participants', icon: Users },
     { id: View.AGENDA, label: '会议议程安排 Agenda', icon: Calendar },
     { id: View.PPT_CREATOR, label: 'PPT 制作 Studio', icon: Presentation },
