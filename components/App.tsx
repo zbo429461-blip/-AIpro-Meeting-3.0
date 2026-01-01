@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
-import { View, Participant, AgendaItem, AppSettings, MeetingBasicInfo, Meeting, MeetingFile, PPTSlide, ChatMessage } from '../types';
+import { View, Participant, AppSettings, MeetingBasicInfo, Meeting, ChatMessage } from '../types';
 import { ParticipantsView } from './ParticipantsView';
 import { AgendaView } from './AgendaView';
 import { TableCardView } from './TableCardView';
@@ -13,13 +14,14 @@ import { AssetManagerView } from './AssetManagerView';
 import { ProjectManagerView } from './ProjectManagerView';
 import { FormsView } from './FormsView';
 import { DailyScheduleView } from './DailyScheduleView';
+import { KnowledgeBaseView } from './KnowledgeBaseView'; // Import new view
 import { 
-  FileText, LayoutDashboard, UserCircle2, ClipboardCheck, Plus, Calendar, 
-  ArrowRight, Trash2, Mic, Mic2, BarChart3, Clock, Users, X, Edit, 
-  MoreVertical, ExternalLink, LogIn, Loader2, Cpu, CheckCircle2, 
-  ArrowRightCircle, Code, Lock, Play, Keyboard, MousePointerClick, 
-  MessageSquare, Sparkles, AlertTriangle, Presentation, Briefcase, 
-  FormInput, LayoutGrid, ArrowLeftCircle 
+  Plus, Trash2, Mic, Cpu, CheckCircle2, 
+  Code, Play, Keyboard, MousePointerClick, Sparkles, 
+  AlertTriangle, Presentation, Briefcase, FormInput, 
+  ArrowLeftCircle, Clock, Users, X, Loader2, 
+  CalendarDays, KanbanSquare, ClipboardCheck, ArrowRight, Settings, Grid, Calendar,
+  BarChart3, UserCircle2, Edit, LogIn, Database
 } from 'lucide-react';
 import { parseMeetingRequest, generateChatResponse } from '../services/aiService';
 
@@ -164,9 +166,6 @@ const WorkflowOverlay = ({ step, data, onClose, onExecute, inputMode, setInputMo
                                 >
                                     复制脚本并跳转系统 <MousePointerClick size={20} />
                                 </button>
-                                <p className="text-xs text-center text-gray-400 mt-4">
-                                    *脚本将尝试点击“申请会议”按钮并填入信息。
-                                </p>
                             </div>
                         )}
                     </div>
@@ -185,13 +184,14 @@ const App: React.FC = () => {
   const [workflowState, setWorkflowState] = useState<{show: boolean, step: number, data: any, inputMode: 'voice' | 'text'}>({ 
       show: false, step: 1, data: null, inputMode: 'voice' 
   });
+  
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [newMeetingName, setNewMeetingName] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   
   const [settings, setSettings] = useState<AppSettings>({
-    aiProvider: 'siliconflow', // Changed Default to SiliconFlow to avoid RPC errors in CN
+    aiProvider: 'gemini',
     geminiKey: '',
     ollamaUrl: 'http://localhost:11434',
     ollamaModel: 'llama3',
@@ -216,17 +216,6 @@ const App: React.FC = () => {
     localStorage.setItem('app_settings', JSON.stringify(newSettings));
   };
 
-  const handleCreateClick = () => {
-      setNewMeetingName('');
-      setShowCreateModal(true);
-  };
-
-  const confirmCreateMeeting = () => {
-      const name = newMeetingName.trim() || '新会议 ' + new Date().toLocaleDateString();
-      createMeeting(name, { topic: name });
-      setShowCreateModal(false);
-  };
-
   const createMeeting = (topic: string, extraInfo: Partial<MeetingBasicInfo> = {}) => {
       const newMeeting: Meeting = {
           id: Date.now().toString(),
@@ -248,98 +237,68 @@ const App: React.FC = () => {
       setCurrentView(View.DASHBOARD);
   };
 
-  const handleEditClick = (meeting: Meeting, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setEditingMeeting(meeting);
-      setShowEditModal(true);
+  const confirmCreateMeeting = () => {
+      createMeeting(newMeetingName);
+      setShowCreateModal(false);
+      setNewMeetingName('');
   };
 
-  const saveMeetingEdit = () => {
-      if (!editingMeeting) return;
-      setMeetings(prev => prev.map(m => m.id === editingMeeting.id ? editingMeeting : m));
-      setShowEditModal(false);
-      setEditingMeeting(null);
+  const handleCreateClick = () => {
+      setNewMeetingName('');
+      setShowCreateModal(true);
   };
 
-  // Helper to update active meeting
   const activeMeeting = meetings.find(m => m.id === currentMeetingId);
+
   const updateActiveMeeting = (updater: (m: Meeting) => Meeting) => {
       if (!activeMeeting) return;
       const updated = updater({ ...activeMeeting });
-      setMeetings(meetings.map(m => m.id === updated.id ? updated : m));
+      setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
   };
 
-  const handleAssistantSend = async (text: string, image?: string) => {
-      if (!activeMeeting || (!text.trim() && !image)) return;
-
-      const userMsg: ChatMessage = {
-          id: Date.now().toString(),
-          role: 'user',
-          content: text,
-          image: image, // Store image data URL for display
-          timestamp: Date.now()
-      };
-
-      // Optimistic update
-      const newHistory = [...(activeMeeting.chatHistory || []), userMsg];
-      updateActiveMeeting(m => ({ ...m, chatHistory: newHistory }));
+  const handleAssistantSend = async (text: string) => {
+      if (!activeMeeting || !text.trim()) return;
       
+      const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
+      updateActiveMeeting(m => ({ ...m, chatHistory: [...(m.chatHistory || []), userMsg] }));
       setAssistantThinking(true);
-
-      // Build context
-      let systemInstruction = `You are an expert academic conference organizer assistant.`;
-      if (settings.knowledgeBase) {
-          systemInstruction += `\n\nUSER PERSONAL STYLE / KNOWLEDGE BASE:\n${settings.knowledgeBase}`;
-      }
       
-      let userQuery: string | { text: string, images: string[] } = text;
-      
-      // If image is present, construct payload with image data (stripping prefix for API if needed, 
-      // but aiService handles base64 stripping if passed correctly)
-      if (image) {
-          // aiService expects array of base64 strings without prefix usually, or handles them.
-          // let's strip prefix here to be safe if we pass it as "images" array
-          const base64Data = image.split(',')[1] || image;
-          userQuery = {
-              text: text || "Please analyze this image.",
-              images: [base64Data]
-          };
-      } else {
-          // Pure text context injection
-          if (text.includes("会议纪要") || text.includes("summarize") || text.includes("总结")) {
-              let summaryContext = `\n\n--- MEETING DATA FOR SUMMARY ---\n`;
-              if (activeMeeting.participants.length > 0) summaryContext += `Participants (${activeMeeting.participants.length}): ${activeMeeting.participants.map(p => p.nameCN).join(', ')}\n`;
-              if (activeMeeting.agenda.length > 0) summaryContext += `Agenda:\n${activeMeeting.agenda.map(a => `- ${a.time} ${a.title} (${a.speaker})`).join('\n')}\n`;
-              userQuery = `${text}\n\n${summaryContext}`;
-          }
-      }
-
       try {
-          const reply = await generateChatResponse(settings, userQuery, systemInstruction);
+          // Optimized Summarization & Context Injection
+          let userQuery = text;
+          const summarizationKeywords = ["会议纪要", "总结", "summarize", "整理", "记录", "整理", "纪要", "归纳", "笔记", "minutes", "highlights"];
           
-          const aiMsg: ChatMessage = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: reply,
-              timestamp: Date.now()
-          };
-          
-          setMeetings(prevMeetings => prevMeetings.map(m => 
-              m.id === activeMeeting.id ? { ...m, chatHistory: [...(m.chatHistory || []), userMsg, aiMsg] } : m
-          ));
+          if (summarizationKeywords.some(k => text.toLowerCase().includes(k))) {
+              let summaryContext = `\n\n--- [系统自动同步: 当前会议核心数据] ---\n`;
+              summaryContext += `【会议概况】\n- 主题: ${activeMeeting.info.topic}\n- 时间: ${activeMeeting.info.date}\n- 地点: ${activeMeeting.info.location || '待定'}\n`;
+              
+              if (activeMeeting.participants.length > 0) {
+                  const signedIn = activeMeeting.participants.filter(p => p.isSignedIn).length;
+                  summaryContext += `【参会情况】\n- 参会人数: ${activeMeeting.participants.length} 人 (已签到 ${signedIn} 人)\n- 名单: ${activeMeeting.participants.map(p => `${p.nameCN} (${p.unitCN})`).join(', ')}\n`;
+              }
+              
+              if (activeMeeting.agenda.length > 0) {
+                  summaryContext += `【议程安排】\n${activeMeeting.agenda.map(a => `- [${a.time}] ${a.title} (负责人/发言人: ${a.speaker || '未指定'})`).join('\n')}\n`;
+              }
+              
+              if (activeMeeting.files && activeMeeting.files.length > 0) {
+                  summaryContext += `【参考资料】\n- 附件列表: ${activeMeeting.files.map(f => f.name).join(', ')}\n`;
+              }
+              
+              userQuery = `${text}\n\n${summaryContext}\n\n[指令]: 请结合以上结构化会议数据，按照专业、条理清晰的行政格式生成回复。`;
+          }
 
-      } catch (e: any) {
-          console.error("Assistant Error", e);
-          const errorMsg: ChatMessage = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: `Error: ${e.message || "Something went wrong."}`,
-              timestamp: Date.now()
-          };
-           setMeetings(prevMeetings => prevMeetings.map(m => 
-              m.id === activeMeeting.id ? { ...m, chatHistory: [...(m.chatHistory || []), userMsg, errorMsg] } : m
-          ));
+          let systemInstruction = `You are "xiaoxiaobo AIpro", a world-class smart conference assistant.`;
+          if (settings.knowledgeBase) {
+              systemInstruction += `\n\nUSER PREFERENCES / BACKGROUND:\n${settings.knowledgeBase}`;
+          }
+
+          const reply = await generateChatResponse(settings, userQuery, systemInstruction);
+          const aiMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: reply, timestamp: Date.now() };
+          
+          setMeetings(prev => prev.map(m => m.id === activeMeeting.id ? { ...m, chatHistory: [...(m.chatHistory || []), aiMsg] } : m));
+      } catch (e) {
+          console.error(e);
       } finally {
           setAssistantThinking(false);
       }
@@ -347,60 +306,49 @@ const App: React.FC = () => {
 
   const startSmartBooking = () => {
     setWorkflowState({ show: true, step: 1, data: null, inputMode: 'voice' });
-    setTimeout(() => startVoiceRec(), 500);
-  };
-
-  const startVoiceRec = () => {
-      if (!('webkitSpeechRecognition' in window)) {
-        alert("您的浏览器不支持语音识别，请使用文本输入。");
-        setWorkflowState(prev => ({ ...prev, inputMode: 'text' }));
-        return;
-      }
-      const recognition = new window.webkitSpeechRecognition();
-      recognition.lang = 'zh-CN';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.onresult = async (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          if (transcript) processBookingInput(transcript);
-      };
-      recognition.start();
+    if ('webkitSpeechRecognition' in window) {
+      const rec = new window.webkitSpeechRecognition();
+      rec.lang = 'zh-CN';
+      rec.onresult = (e: any) => processBookingInput(e.results[0][0].transcript);
+      rec.start();
+    }
   };
 
   const processBookingInput = async (text: string) => {
     setWorkflowState(prev => ({ ...prev, step: 2 }));
-    const extracted = await parseMeetingRequest(text, settings);
-    if (extracted) {
-        setTimeout(() => setWorkflowState(prev => ({ ...prev, step: 3 })), 1000);
-        setTimeout(() => {
-            setWorkflowState(prev => ({ ...prev, show: true, step: 4, data: extracted }));
-            createMeeting(extracted.topic || text, { date: extracted.date, location: extracted.location });
-        }, 2000);
-    } else {
-        alert("未能识别会议信息，请重试。");
+    try {
+        const extracted = await parseMeetingRequest(text, settings);
+        if (extracted) {
+            setTimeout(() => setWorkflowState(prev => ({ ...prev, step: 3 })), 1000);
+            setTimeout(() => {
+                setWorkflowState(prev => ({ ...prev, show: true, step: 4, data: extracted }));
+                createMeeting(extracted.topic || text, { date: extracted.date, location: extracted.location });
+            }, 2000);
+        } else {
+            alert("未能识别会议信息，请重试。");
+            setWorkflowState(prev => ({ ...prev, show: false, step: 1 }));
+        }
+    } catch (error: any) {
+        console.error("Smart Booking Error:", error);
+        alert(`识别失败: ${error.message || "请检查网络或 API 设置"}`);
         setWorkflowState(prev => ({ ...prev, show: false, step: 1 }));
     }
   };
 
   const executeWorkflow = () => {
-      const script = `(function(){ console.log("Auto-filling..."); const data = ${JSON.stringify(workflowState.data)}; 
-      /* ... (Shortened script for brevity, same logic as before) ... */
-      })();`;
-      navigator.clipboard.writeText(script).then(() => {
-          window.open("https://emeet.cupl.edu.cn/app.DTManage/?m=dtmanage&c=AMeetScreen&a=initMain", "_blank");
-          setWorkflowState(prev => ({ ...prev, show: false }));
-          alert("自动化脚本已复制！跳转后请按 F12 -> Console -> Ctrl+V 执行。");
-      });
+    const script = `(function(){ console.log("Auto-filling..."); const data = ${JSON.stringify(workflowState.data)}; 
+    console.log("Navigating to booking system..."); 
+    /* Automation logic simulation */
+    })();`;
+    navigator.clipboard.writeText(script).then(() => {
+        window.open("https://emeet.cupl.edu.cn/app.DTManage/?m=dtmanage&c=AMeetScreen&a=initMain", "_blank");
+        setWorkflowState(prev => ({ ...prev, show: false }));
+        alert("自动化脚本已复制！跳转后请按 F12 -> Console -> Ctrl+V 执行。");
+    });
   };
 
   const deleteMeeting = (id: string) => {
-    if (window.confirm('确定要删除这个会议吗？')) {
-      setMeetings(prev => prev.filter(m => m.id !== id));
-      if (currentMeetingId === id) {
-        setCurrentMeetingId(null);
-        setCurrentView(View.MEETING_LIST);
-      }
-    }
+    if (confirm("确定删除？")) setMeetings(prev => prev.filter(m => m.id !== id));
   };
 
   const selectMeeting = (id: string) => {
@@ -408,41 +356,72 @@ const App: React.FC = () => {
       setCurrentView(View.DASHBOARD);
   };
 
+  const handlePortalClick = (view: View) => {
+      if (view === View.MEETING_LIST) {
+          setCurrentMeetingId(null); 
+      }
+      setCurrentView(view);
+  };
+
+  const handleEditClick = (meeting: Meeting, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingMeeting(meeting);
+      setShowEditModal(true);
+  };
+
+  const saveMeetingEdit = () => {
+      if (editingMeeting) {
+          setMeetings(prev => prev.map(m => m.id === editingMeeting.id ? editingMeeting : m));
+          setShowEditModal(false);
+          setEditingMeeting(null);
+      }
+  };
+
   if (currentView === View.HOME) {
-      return (
-          <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans">
-              <div className="max-w-4xl w-full px-6 text-center">
-                  <div className="mb-12">
-                      <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6">X</div>
-                      <h1 className="text-4xl font-serif-sc font-bold text-slate-900 mb-4">xiaoxiaobo 工作智能助手</h1>
-                      <p className="text-xl text-slate-500">智能工作全流程管理 · 高效 · 便捷 · 智能</p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                      <div onClick={() => setCurrentView(View.MEETING_LIST)} className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-indigo-100 transition-all cursor-pointer group transform hover:-translate-y-2">
-                          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform"><LayoutDashboard size={28}/></div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">智能会议功能</h3>
-                          <p className="text-sm text-gray-500">会议创建、议程安排、桌牌制作、AI 辅助全流程管理</p>
-                      </div>
-                      <div onClick={() => setCurrentView(View.ASSET_MANAGER)} className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-green-100 transition-all cursor-pointer group transform hover:-translate-y-2">
-                          <div className="w-14 h-14 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform"><Briefcase size={28}/></div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">资产管理功能</h3>
-                          <p className="text-sm text-gray-500">固定资产登记、位置管理、在线编辑与Excel导出</p>
-                      </div>
-                      <div onClick={() => alert("电子表单功能开发中...")} className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 hover:shadow-2xl hover:border-orange-100 transition-all cursor-pointer group transform hover:-translate-y-2 relative overflow-hidden">
-                           <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-bold">Coming Soon</div>
-                          <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform"><FormInput size={28}/></div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">电子表单功能</h3>
-                          <p className="text-sm text-gray-500">自定义表单、数据收集、智能统计与分析</p>
-                      </div>
-                  </div>
-                  <div className="mt-16 text-center text-slate-400 text-xs font-mono">copyright xiaoxiaobo</div>
-              </div>
-          </div>
-      );
+    const portalItems = [
+        { id: View.MEETING_LIST, label: '智能会议', icon: CalendarDays, color: 'bg-indigo-600', desc: '全流程会议管理与 AI 辅助' },
+        { id: View.KNOWLEDGE_BASE, label: '本地知识库 RAG', icon: Database, color: 'bg-teal-600', desc: 'PDF/Word 知识图谱分析与问答' },
+        { id: View.PROJECT_MANAGER, label: '项目管理', icon: KanbanSquare, color: 'bg-blue-600', desc: '甘特图看板、项目进度与任务预警' },
+        { id: View.ASSET_MANAGER, label: '资产管理', icon: Briefcase, color: 'bg-emerald-600', desc: '资产台账、Spreadsheet 运维与备注' },
+        { id: View.DAILY_SCHEDULE, label: '工作排期', icon: Clock, color: 'bg-orange-500', desc: '专业日历视图、分屏任务处理' },
+        { id: View.FORMS, label: '电子表单', icon: ClipboardCheck, color: 'bg-purple-600', desc: 'AI 扫描生单、在线字段维护' }
+    ];
+
+    return (
+        <div className="min-h-screen bg-[#f3f4f6] font-sans flex flex-col">
+            <header className="py-16 px-10 flex flex-col items-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-indigo-500/30 mb-6 border border-white/20">X</div>
+                <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">小小博 AIpro 工作助手</h1>
+                <p className="text-slate-500 text-lg font-medium">高效 · 智能 · 极简全能数字化工作门户</p>
+                <div className="mt-6 flex gap-4">
+                    <button onClick={() => setCurrentView(View.SETTINGS)} className="px-4 py-2 bg-white border border-gray-200 rounded-full text-gray-600 text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"><Settings size={14}/> AI 设置</button>
+                </div>
+            </header>
+            <main className="flex-1 max-w-7xl mx-auto w-full px-10 pb-24">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {portalItems.map((item) => (
+                        <div key={item.id} onClick={() => handlePortalClick(item.id)} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-200/50 hover:shadow-2xl hover:border-indigo-100 transition-all cursor-pointer group transform hover:-translate-y-2 flex flex-col min-h-[280px]">
+                            <div className={`w-16 h-16 ${item.color} rounded-2xl flex items-center justify-center text-white mb-8 group-hover:scale-110 transition-transform shadow-lg border border-white/20`}><item.icon size={32}/></div>
+                            <h3 className="text-2xl font-bold text-slate-900 mb-3">{item.label}</h3>
+                            <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">{item.desc}</p>
+                            <div className="mt-auto flex items-center gap-2 text-indigo-600 font-bold text-sm">立即进入 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/></div>
+                        </div>
+                    ))}
+                    <div className="bg-white/40 p-8 rounded-[2.5rem] border-2 border-dashed border-gray-300 hover:border-indigo-300 hover:bg-white/60 transition-all flex flex-col items-center justify-center text-center group">
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 mb-4 transition-colors"><Grid size={24}/></div>
+                        <h3 className="font-bold text-gray-600">更多数字化应用</h3>
+                        <p className="text-xs text-gray-400 mt-1">持续更新中...</p>
+                    </div>
+                </div>
+            </main>
+            <footer className="py-10 text-center text-slate-400 text-xs border-t border-gray-200/50 bg-white/50 backdrop-blur-sm">&copy; 小小博 AIpro | 多模态智能工作底座 v3.6</footer>
+        </div>
+    );
   }
 
   if (currentView === View.ASSET_MANAGER) return <AssetManagerView onBack={() => setCurrentView(View.HOME)} settings={settings} />;
   if (currentView === View.PROJECT_MANAGER) return <ProjectManagerView onBack={() => setCurrentView(View.HOME)} />;
+  if (currentView === View.KNOWLEDGE_BASE) return <KnowledgeBaseView onBack={() => setCurrentView(View.HOME)} settings={settings} />;
   if (currentView === View.DAILY_SCHEDULE) return (
       <div className="h-screen flex flex-col bg-white">
           <div className="bg-white border-b px-8 py-4 flex items-center gap-4 sticky top-0 z-50">
@@ -472,128 +451,93 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen w-full bg-[#f8f9fa] text-gray-800 font-sans">
+    <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden">
       {workflowState.show && <WorkflowOverlay {...workflowState} setInputMode={m => setWorkflowState(prev => ({...prev, inputMode: m}))} onTextSubmit={processBookingInput} onExecute={executeWorkflow} onClose={() => setWorkflowState(prev => ({...prev, show: false}))} />}
-      
       {currentView !== View.MEETING_LIST && activeMeeting && (
         <Sidebar currentView={currentView} onViewChange={setCurrentView} collapsed={sidebarCollapsed} toggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} onBackToHome={() => { setCurrentMeetingId(null); setCurrentView(View.MEETING_LIST); }} />
       )}
-
-      <main className="flex-1 overflow-hidden relative flex flex-col transition-all duration-300">
+      <main className="flex-1 flex flex-col overflow-hidden">
         {(currentView === View.MEETING_LIST || !activeMeeting) ? (
-             // ... Meeting List View (Same as before) ...
-             <div className="min-h-screen bg-slate-50 p-8 md:p-16 font-sans relative overflow-y-auto flex flex-col">
-              <div className="max-w-6xl mx-auto w-full flex-1">
-                  <header className="mb-12 flex justify-between items-end">
-                      <div>
-                           <div className="flex items-center gap-2 mb-2">
-                               <button onClick={() => setCurrentView(View.HOME)} className="text-gray-400 hover:text-indigo-600 flex items-center gap-1 text-sm font-medium transition-colors">
-                                   <ArrowLeftCircle size={16}/> 返回主页
-                               </button>
-                           </div>
-                          <h1 className="text-4xl font-serif-sc font-bold text-slate-900 mb-3 flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-xl shadow-lg">M</div>
-                              智能会议功能
-                          </h1>
-                          <div className="flex items-center gap-4">
-                              <p className="text-slate-500 text-lg">智能工作全流程管理</p>
-                              <a href="https://emeet.cupl.edu.cn/app.DTManage/?m=dtmanage&c=AMeetScreen&a=initMain" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 rounded-lg text-indigo-700 hover:bg-indigo-50 transition-all font-serif-sc text-sm"><LogIn size={14}/> 登录法大会议系统</a>
-                          </div>
-                      </div>
-                      <div className="flex gap-3">
-                          <button onClick={startSmartBooking} className="px-6 py-3 bg-white text-indigo-600 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center gap-2 hover:bg-gray-50"><Sparkles size={20} className="text-purple-500" /> 智能预约</button>
-                          <button onClick={handleCreateClick} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center gap-2 hover:bg-indigo-700"><Plus size={20} /> 创建新会议</button>
-                      </div>
-                  </header>
-                  {/* ... Dashboard Stats & List (Same as before) ... */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-3 bg-blue-50 rounded-full text-blue-600"><BarChart3 size={24} /></div><div><p className="text-sm text-gray-500 font-medium">累计会议</p><p className="text-2xl font-bold text-gray-900">{meetings.length} <span className="text-xs font-normal text-gray-400">场</span></p></div></div>
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-3 bg-green-50 rounded-full text-green-600"><Clock size={24} /></div><div><p className="text-sm text-gray-500 font-medium">即将开始</p><p className="text-2xl font-bold text-gray-900">{meetings.filter(m => new Date(m.info.date) >= new Date()).length} <span className="text-xs font-normal text-gray-400">场</span></p></div></div>
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4"><div className="p-3 bg-purple-50 rounded-full text-purple-600"><Users size={24} /></div><div><p className="text-sm text-gray-500 font-medium">累计参会</p><p className="text-2xl font-bold text-gray-900">{meetings.reduce((acc, m) => acc + m.participants.length, 0)} <span className="text-xs font-normal text-gray-400">人次</span></p></div></div>
-                  </div>
-                  {meetings.length === 0 ? (
-                      <div className="text-center py-24 bg-white rounded-3xl shadow-sm border border-gray-100"><div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6"><Calendar size={40} className="text-indigo-300" /></div><h3 className="text-2xl font-bold text-gray-800 mb-2">暂无会议</h3><p className="text-gray-400 mb-8">点击右上角创建您的第一个智能会议</p></div>
-                  ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-                          {meetings.map(meeting => (
-                              <div key={meeting.id} onClick={() => selectMeeting(meeting.id)} className="group bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl hover:border-indigo-100 transition-all cursor-pointer relative overflow-visible flex flex-col">
-                                  <button onClick={(e) => { e.stopPropagation(); deleteMeeting(meeting.id); }} className="absolute -top-3 -right-3 p-2 bg-white text-gray-400 hover:text-red-600 rounded-full shadow-md border border-gray-200 z-50 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
-                                  <div className="p-6 flex-1">
-                                      <div className="flex justify-between items-start mb-4">
-                                          <div className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold uppercase tracking-wide">{meeting.info.date}</div>
-                                          <button onClick={(e) => handleEditClick(meeting, e)} className="text-gray-300 hover:text-indigo-600 z-20"><Edit size={16} /></button>
-                                      </div>
-                                      <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1">{meeting.info.topic}</h3>
-                                      <p className="text-gray-500 text-sm mb-6 flex items-center gap-2"><UserCircle2 size={14} /> {meeting.participants.length} 人参会</p>
-                                      <div className="flex items-center text-sm font-medium text-indigo-600 gap-1 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all">进入管理 <ArrowRight size={14} /></div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  )}
-              </div>
-              <div className="py-6 text-center text-slate-400 text-xs font-mono mt-auto border-t border-slate-100">copyright xiaoxiaobo</div>
-             </div>
-        ) : (
-            <>
-                <header className="bg-white border-b border-gray-200 h-16 flex items-center px-8 justify-between shadow-sm z-10 flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setCurrentView(View.MEETING_LIST)} className="text-gray-400 hover:text-indigo-600 mr-2 transition-colors"><ArrowLeftCircle size={20}/></button>
-                        <h1 className="text-xl font-serif-sc font-bold text-slate-800 tracking-tight">智能会议助手 <span className="text-indigo-600">AI Meeting</span></h1>
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded border border-gray-200 uppercase tracking-wide">{activeMeeting.info.topic}</span>
-                        {assistantThinking && <span className="flex items-center gap-1 text-xs text-indigo-500 animate-pulse bg-indigo-50 px-2 py-0.5 rounded"><Sparkles size={10} /> 助手思考中...</span>}
+            <div className="p-10 overflow-y-auto h-full bg-[#f3f4f6]">
+                <header className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
+                    <div>
+                        <button onClick={() => setCurrentView(View.HOME)} className="text-indigo-600 mb-3 flex items-center gap-2 font-bold group"><ArrowLeftCircle size={20} className="group-hover:-translate-x-1 transition-transform"/> 返回门户</button>
+                        <h1 className="text-3xl font-bold text-slate-900">智能会议室功能</h1>
                     </div>
-                    <div className="text-sm text-gray-400 italic">{activeMeeting.info.date}</div>
+                    <div className="flex gap-4">
+                        <button onClick={startSmartBooking} className="px-6 py-2.5 bg-white border border-indigo-200 text-indigo-600 rounded-xl shadow-sm flex items-center gap-2 font-bold hover:bg-indigo-50 transition-colors"><Sparkles size={18}/> 智能预约</button>
+                        <button onClick={handleCreateClick} className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl shadow-md flex items-center gap-2 font-bold hover:bg-indigo-700 transition-colors"><Plus size={18}/> 创建新会议</button>
+                    </div>
                 </header>
-
-                <div className="flex-1 overflow-auto bg-[#f8f9fa]">
-                    {currentView === View.PARTICIPANTS && <ParticipantsView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} settings={settings} />}
-                    {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={(a) => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingInfo={activeMeeting.info} setMeetingInfo={(i) => updateActiveMeeting(m => ({...m, info: i}))} />}
-                    {currentView === View.TABLE_CARDS && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
-                    {currentView === View.PPT_CREATOR && <PPTCreatorView slides={activeMeeting.pptSlides} setSlides={(s) => updateActiveMeeting(m => ({...m, pptSlides: s}))} settings={settings} topic={activeMeeting.info.topic} />}
-                    {currentView === View.SIGN_IN && <SignInView participants={activeMeeting.participants} setParticipants={(p) => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingTopic={activeMeeting.info.topic} />}
-                    {currentView === View.FILES && <FilesView files={activeMeeting.files} setFiles={(f) => updateActiveMeeting(m => ({...m, files: f}))} />}
-                    {currentView === View.ASSISTANT && <AssistantView
-                        settings={settings}
-                        files={activeMeeting.files}
-                        participants={activeMeeting.participants}
-                        agenda={activeMeeting.agenda}
-                        onSaveSettings={handleSaveSettings}
-                        messages={activeMeeting.chatHistory || []}
-                        onSendMessage={handleAssistantSend}
-                        isThinking={assistantThinking}
-                    />}
-                    {/* ... Dashboard (Same as before) ... */}
-                    {currentView === View.DASHBOARD && (
-                        <div className="p-10 max-w-7xl mx-auto">
-                           <div className="mb-10"><h1 className="text-4xl font-serif-sc font-bold text-slate-900 mb-2">{activeMeeting.info.topic}</h1><p className="text-slate-500">会议日期: {activeMeeting.info.date} | 地点: {activeMeeting.info.location || '待定'}</p></div>
-                           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
-                               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group"><div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><UserCircle2 size={100} className="text-indigo-900"/></div><h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">参会人数</h3><p className="text-5xl font-black text-slate-900">{activeMeeting.participants.length}</p></div>
-                               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group"><div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><ClipboardCheck size={100} className="text-green-900"/></div><h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">已签到</h3><p className="text-5xl font-black text-green-600">{activeMeeting.participants.filter(p => p.isSignedIn).length}</p></div>
-                               <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group"><div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Presentation size={100} className="text-orange-900"/></div><h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">PPT 页面</h3><p className="text-5xl font-black text-slate-900">{activeMeeting.pptSlides?.length || 0}</p></div>
-                               <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-2xl shadow-lg text-white relative overflow-hidden"><h3 className="text-lg font-bold mb-4 z-10 relative">快速操作</h3><div className="grid grid-cols-2 gap-3 z-10 relative"><button onClick={() => setCurrentView(View.PARTICIPANTS)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">管理人员</button><button onClick={() => setCurrentView(View.TABLE_CARDS)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">打印桌牌</button><button onClick={() => setCurrentView(View.PPT_CREATOR)} className="p-2 bg-white/10 rounded hover:bg-white/20 text-xs">PPT 制作</button></div></div>
-                           </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                    {meetings.map(m => (
+                        <div key={m.id} onClick={() => selectMeeting(m.id)} className="p-8 bg-white rounded-[2rem] border border-gray-200 shadow-sm hover:shadow-xl hover:border-indigo-200 cursor-pointer relative group transition-all transform hover:-translate-y-1">
+                            <button onClick={(e) => { e.stopPropagation(); deleteMeeting(m.id); }} className="absolute -top-3 -right-3 p-2.5 bg-white shadow-lg rounded-full text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 border border-gray-100"><Trash2 size={16}/></button>
+                            <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">{m.info.date}</span>
+                            <div className="flex justify-between items-start mt-2">
+                                <h3 className="text-2xl font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{m.info.topic}</h3>
+                                <button onClick={(e) => handleEditClick(m, e)} className="text-gray-300 hover:text-indigo-600"><Edit size={16} /></button>
+                            </div>
+                            <div className="mt-4 flex gap-4 text-xs text-gray-400 font-bold uppercase tracking-widest">
+                                <span className="flex items-center gap-1"><Users size={14}/> {m.participants.length} 人</span>
+                                <span className="flex items-center gap-1"><Presentation size={14}/> {m.pptSlides?.length || 0} 页</span>
+                            </div>
+                        </div>
+                    ))}
+                    {meetings.length === 0 && (
+                        <div className="col-span-full py-32 flex flex-col items-center justify-center text-center bg-white/40 border-2 border-dashed border-gray-300 rounded-[3rem]">
+                            <CalendarDays size={64} className="text-gray-300 mb-4 opacity-50"/>
+                            <h3 className="text-xl font-bold text-gray-400">还没有任何会议记录</h3>
+                            <p className="text-sm text-gray-300 mt-1">点击右上角“创建新会议”开启智能管理</p>
                         </div>
                     )}
+                </div>
+            </div>
+        ) : (
+            <>
+                <header className="h-16 border-b bg-white flex items-center px-8 justify-between shrink-0 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => { setCurrentMeetingId(null); setCurrentView(View.MEETING_LIST); }} className="text-gray-400 hover:text-indigo-600 transition-colors"><ArrowLeftCircle size={24}/></button>
+                        <h2 className="font-bold text-slate-900">{activeMeeting.info.topic}</h2>
+                    </div>
+                </header>
+                <div className="flex-1 overflow-auto p-8 bg-[#f8f9fa]">
+                    {currentView === View.DASHBOARD && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                            <div className="p-10 bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                <h4 className="text-gray-400 text-xs font-bold mb-2 uppercase tracking-widest">参会总人数</h4>
+                                <p className="text-5xl font-black text-slate-900">{activeMeeting.participants.length}</p>
+                            </div>
+                            <div className="p-10 bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                <h4 className="text-gray-400 text-xs font-bold mb-2 uppercase tracking-widest">实时已签到</h4>
+                                <p className="text-5xl font-black text-green-600">{activeMeeting.participants.filter(p => p.isSignedIn).length}</p>
+                            </div>
+                            <div className="p-10 bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                <h4 className="text-gray-400 text-xs font-bold mb-2 uppercase tracking-widest">会议议程数</h4>
+                                <p className="text-5xl font-black text-indigo-600">{activeMeeting.agenda.length}</p>
+                            </div>
+                             <div className="col-span-full bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-2xl shadow-lg text-white relative overflow-hidden"><h3 className="text-lg font-bold mb-4 z-10 relative">快速操作</h3><div className="grid grid-cols-4 gap-3 z-10 relative"><button onClick={() => setCurrentView(View.PARTICIPANTS)} className="p-3 bg-white/10 rounded hover:bg-white/20 text-sm font-bold">管理人员</button><button onClick={() => setCurrentView(View.TABLE_CARDS)} className="p-3 bg-white/10 rounded hover:bg-white/20 text-sm font-bold">打印桌牌</button><button onClick={() => setCurrentView(View.PPT_CREATOR)} className="p-3 bg-white/10 rounded hover:bg-white/20 text-sm font-bold">PPT 制作</button><button onClick={() => setCurrentView(View.SIGN_IN)} className="p-3 bg-white/10 rounded hover:bg-white/20 text-sm font-bold">扫码签到</button></div></div>
+                        </div>
+                    )}
+                    {currentView === View.PARTICIPANTS && <ParticipantsView participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} settings={settings} />}
+                    {currentView === View.AGENDA && <AgendaView agenda={activeMeeting.agenda} setAgenda={a => updateActiveMeeting(m => ({...m, agenda: a}))} settings={settings} participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingInfo={activeMeeting.info} setMeetingInfo={i => updateActiveMeeting(m => ({...m, info: i}))} />}
+                    {currentView === View.TABLE_CARDS && <TableCardView participants={activeMeeting.participants} settings={settings} meetingTopic={activeMeeting.info.topic} />}
+                    {currentView === View.PPT_CREATOR && <PPTCreatorView slides={activeMeeting.pptSlides} setSlides={s => updateActiveMeeting(m => ({...m, pptSlides: s}))} settings={settings} topic={activeMeeting.info.topic} />}
+                    {currentView === View.SIGN_IN && <SignInView participants={activeMeeting.participants} setParticipants={p => updateActiveMeeting(m => ({...m, participants: typeof p === 'function' ? p(m.participants) : p}))} meetingTopic={activeMeeting.info.topic} />}
+                    {currentView === View.FILES && <FilesView files={activeMeeting.files} setFiles={f => updateActiveMeeting(m => ({...m, files: f}))} />}
+                    {currentView === View.ASSISTANT && <AssistantView settings={settings} messages={activeMeeting.chatHistory || []} onSendMessage={handleAssistantSend} isThinking={assistantThinking} onSaveSettings={handleSaveSettings} participants={activeMeeting.participants} agenda={activeMeeting.agenda} files={activeMeeting.files} />}
                 </div>
             </>
         )}
       </main>
-      
-      {/* ... Modals (Create/Edit) ... */}
-      {showCreateModal && (
-          <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm">
-              <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md transform transition-all scale-100">
-                  <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-gray-900">创建新会议</h3><button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button></div>
-                  <div className="mb-6"><label className="block text-sm font-medium text-gray-700 mb-2">会议名称</label><input type="text" value={newMeetingName} onChange={(e) => setNewMeetingName(e.target.value)} placeholder="例如：2025年度学术研讨会" className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent" autoFocus/></div>
-                  <div className="flex gap-3"><button onClick={() => setShowCreateModal(false)} className="flex-1 py-3 text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">取消</button><button onClick={confirmCreateMeeting} disabled={!newMeetingName.trim()} className="flex-1 py-3 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-50">创建</button></div>
-              </div>
-          </div>
-      )}
-       {showEditModal && editingMeeting && (
-          <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center backdrop-blur-sm">
-              <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md transform transition-all scale-100">
-                  <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-gray-900">编辑会议信息</h3><button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button></div>
+
+      {showEditModal && editingMeeting && (
+          <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-6 backdrop-blur-sm">
+              <div className="bg-white p-10 rounded-[2rem] shadow-2xl w-full max-w-md animate-slideUp">
+                  <div className="flex justify-between items-center mb-8">
+                      <h3 className="text-2xl font-bold text-slate-900">编辑会议信息</h3>
+                      <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-slate-900 transition-colors"><X size={28}/></button>
+                  </div>
                   <div className="space-y-4 mb-6">
                       <div><label className="block text-sm font-medium text-gray-700 mb-2">会议名称</label><input type="text" value={editingMeeting.info.topic} onChange={(e) => setEditingMeeting({...editingMeeting, info: {...editingMeeting.info, topic: e.target.value}})} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"/></div>
                       <div><label className="block text-sm font-medium text-gray-700 mb-2">日期</label><input type="date" value={editingMeeting.info.date} onChange={(e) => setEditingMeeting({...editingMeeting, info: {...editingMeeting.info, date: e.target.value}})} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"/></div>

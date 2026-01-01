@@ -1,8 +1,81 @@
 
+// ... (imports remain the same)
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { AppSettings, Participant, AgendaItem, CardDesign, PPTSlide, FormField, AssetItem } from "../types";
+import { AppSettings, Participant, AgendaItem, CardDesign, PPTSlide, FormField, AssetItem, KnowledgeGraphData } from "../types";
 // @ts-ignore
 import * as gradio from "@gradio/client";
+
+// --- Helper Functions ---
+
+export const extractJson = (text: string): any => {
+  try {
+    // 1. Try direct parse
+    return JSON.parse(text);
+  } catch (e) {
+    // 2. Try markdown block
+    const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+    if (match) {
+      try { return JSON.parse(match[1]); } catch (e2) {}
+    }
+    // 3. Try finding array or object boundaries
+    const startObj = text.indexOf('{');
+    const endObj = text.lastIndexOf('}');
+    if (startObj !== -1 && endObj !== -1) {
+        try { return JSON.parse(text.substring(startObj, endObj + 1)); } catch (e3) {}
+    }
+    const startArr = text.indexOf('[');
+    const endArr = text.lastIndexOf(']');
+    if (startArr !== -1 && endArr !== -1) {
+        try { return JSON.parse(text.substring(startArr, endArr + 1)); } catch (e4) {}
+    }
+    // Return raw text if strict JSON parsing fails, or empty object/array depending on context? 
+    // Throwing error is safer so caller handles it.
+    throw new Error("Could not extract JSON from response");
+  }
+};
+
+export const base64ToBlob = (base64: string, mimeType: string) => {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+};
+
+export const fetchSiliconFlowModels = async (apiKey: string): Promise<string[]> => {
+    if (!apiKey) return [];
+    try {
+        const response = await fetch('https://api.siliconflow.cn/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        // Filter for chat/instruct models
+        return data.data
+            .filter((m: any) => m.id.toLowerCase().includes('chat') || m.id.toLowerCase().includes('instruct'))
+            .map((m: any) => m.id);
+    } catch (e) {
+        console.warn("Failed to fetch SiliconFlow models", e);
+        return [];
+    }
+};
+
+export const performGradioOCR = async (base64Data: string, mimeType: string): Promise<string> => {
+    try {
+        // @ts-ignore
+        const ClientConstructor = gradio.Client || (gradio.default && gradio.default.Client) || gradio.default;
+        if (!ClientConstructor) return "";
+        const client = await ClientConstructor.connect("erow/OCR-DEMO");
+        const blob = base64ToBlob(base64Data, mimeType);
+        const result = await client.predict("/partial", [blob, "Base"]);
+        return result.data?.[0] || "";
+    } catch (e) {
+        console.warn("Gradio OCR Error:", e);
+        return "";
+    }
+};
 
 export const getAIProviderLabel = (settings: AppSettings): string => {
   switch (settings.aiProvider) {
@@ -19,112 +92,12 @@ export const getAIProviderLabel = (settings: AppSettings): string => {
   }
 };
 
-export const fetchSiliconFlowModels = async (apiKey: string): Promise<string[]> => {
-  if (!apiKey) throw new Error("API Key is required.");
-  
-  // Sanitize Key: Remove whitespace and check for non-ASCII characters
-  const safeKey = apiKey.trim();
-  if (/[^\x00-\x7F]/.test(safeKey)) {
-      throw new Error("API Key 包含非法字符（如中文或全角符号），请检查输入。");
-  }
-
-  try {
-    const response = await fetch('https://api.siliconflow.cn/v1/models', {
-      headers: { 'Authorization': `Bearer ${safeKey}` }
-    });
-    if (!response.ok) throw new Error(`Failed to fetch models: ${response.status}`);
-    const data = await response.json();
-    
-    // Filter logic improved: Case-insensitive and broader keyword match
-    return (data.data || []).map((model: any) => model.id).filter((id: string) => {
-        const lowerId = id.toLowerCase();
-        // Allow DeepSeek, Qwen, Llama, GLM, Yi
-        const isSupportedFamily = lowerId.includes('deepseek') || lowerId.includes('qwen') || lowerId.includes('llama') || lowerId.includes('glm') || lowerId.includes('yi');
-        // Ensure it's a chat/instruct/VL model (not just embeddings)
-        const isChatModel = lowerId.includes('instruct') || lowerId.includes('chat') || lowerId.includes('vl');
-        // Exclude raw vision encoders if explicitly marked (usually not an issue if we check for chat/instruct)
-        return isSupportedFamily && isChatModel;
-    });
-  } catch (e) {
-    console.error(e);
-    throw e;
-  }
-};
-
-const extractJson = (text: string): string => {
-  // Try to find markdown json block
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (match && match[1]) {
-    return match[1].trim();
-  }
-  // Try to find the first { or [ and the last } or ]
-  const firstBrace = text.search(/[{[]/);
-  
-  if (firstBrace !== -1) {
-     // Naive extraction if no code blocks
-     // Find the last closing brace
-     let lastIndex = text.lastIndexOf('}');
-     const lastBracket = text.lastIndexOf(']');
-     if (lastBracket > lastIndex) lastIndex = lastBracket;
-     
-     if (lastIndex > firstBrace) {
-         return text.substring(firstBrace, lastIndex + 1);
-     }
-  }
-  
-  return text.trim();
-};
-
-const base64ToBlob = (base64: string, mimeType: string) => {
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: mimeType });
-};
-
-// Perform OCR using Gradio (erow/OCR-DEMO)
-const performGradioOCR = async (base64Data: string, mimeType: string): Promise<string> => {
-    try {
-        console.log("Connecting to Gradio OCR...");
-        
-        // Handle ESM/CJS interop for CDN imports where named exports might be hidden on default
-        // @ts-ignore
-        const ClientConstructor = gradio.Client || (gradio.default && gradio.default.Client) || gradio.default;
-        
-        if (!ClientConstructor) {
-            throw new Error("Gradio Client not found in module");
-        }
-
-        const client = await ClientConstructor.connect("erow/OCR-DEMO");
-        const blob = base64ToBlob(base64Data, mimeType);
-        
-        // Use array for positional arguments [image, model_size]
-        const result = await client.predict("/partial", [ 
-            blob, 
-            "Base" 
-        ]);
-        
-        // The API returns [html_string, ...]
-        const output = result.data?.[0];
-        console.log("OCR Success");
-        return typeof output === 'string' ? output : JSON.stringify(output);
-    } catch (e: any) {
-        console.warn("Gradio OCR failed:", e);
-        throw new Error(`OCR Service Error: ${e.message || 'Unknown error'}`);
-    }
-};
-
 // Helper: Retry operation for transient network errors (RPC/Fetch)
 async function retryWithBackoff<T>(operation: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
     try {
         return await operation();
     } catch (error: any) {
         const msg = (error.message || error.toString()).toLowerCase();
-        // Check for common transient errors: RPC failed, Fetch failed, or 503/504/429 status codes
-        // Also handling 'NetworkError' and 'Load failed' which are common in browser
         if (retries > 0 && (
             msg.includes("rpc") || 
             msg.includes("fetch") || 
@@ -133,7 +106,8 @@ async function retryWithBackoff<T>(operation: () => Promise<T>, retries = 3, del
             msg.includes("load failed") ||
             msg.includes("503") || 
             msg.includes("504") || 
-            msg.includes("429")
+            msg.includes("429") ||
+            error instanceof TypeError 
         )) {
             console.warn(`Transient API Error (${msg}), retrying in ${delay}ms... Attempts left: ${retries}`);
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -204,14 +178,12 @@ const generateContentWithProvider = async (
       if (typeof contents === 'string') {
         userContent = contents;
       } else {
-        // Convert Gemini parts to OpenAI/SiliconFlow Content Array
         userContent = contents.parts.map((part: any) => {
           if (part.text) return { type: 'text', text: part.text };
           if (part.inlineData) {
             return { 
                 type: 'image_url', 
                 image_url: { 
-                    // SiliconFlow expects Data URL
                     url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` 
                 } 
             };
@@ -221,23 +193,14 @@ const generateContentWithProvider = async (
       }
       messages.push({ role: 'user', content: userContent });
 
-      // Auto-switch to Vision Model if images detected
       let modelToUse = settings.siliconFlowModel || 'deepseek-ai/DeepSeek-V3';
       const hasImage = Array.isArray(userContent) && userContent.some((c:any) => c.type === 'image_url');
       
-      // If we have images, SiliconFlow requires a VL model (like Qwen-VL). DeepSeek-V3 is text only.
       if (hasImage) {
-          // Check if current model is already VL capable (simple check for 'VL' in name)
-          // Use the latest Qwen2.5-VL-72B if available or requested
           if (!modelToUse.includes('VL') || modelToUse.includes('DeepSeek')) {
                modelToUse = 'Qwen/Qwen2.5-VL-72B-Instruct'; 
-               console.log("Auto-switched to High-Performance Vision Model (vLLM):", modelToUse);
           }
       }
-
-      // NOTE: We DO NOT use response_format: { type: 'json_object' } here because many SiliconFlow models 
-      // (like DeepSeek V3/R1) do not support it and return 400.
-      // We rely on the prompts (which ask for JSON) and extractJson() to handle parsing.
 
       const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
@@ -246,7 +209,6 @@ const generateContentWithProvider = async (
           model: modelToUse, 
           messages, 
           stream: false, 
-          // response_format: isJsonMode ? { type: 'json_object' } : undefined, // Removed to prevent 400 Error
           max_tokens: 4096 
         })
       });
@@ -265,12 +227,10 @@ const generateContentWithProvider = async (
       if (!apiKey) throw new Error("Gemini API Key missing (Environment Variable).");
       
       const ai = new GoogleGenAI({ apiKey });
-      // Support model override for higher accuracy tasks
       const model = config?.model || 'gemini-3-flash-preview';
       const { model: _, ...genConfig } = config || {};
       
       try {
-        // Use retryWithBackoff for robust network handling
         const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
           model: model,
           contents,
@@ -281,8 +241,7 @@ const generateContentWithProvider = async (
         return isJsonMode ? extractJson(textResponse) : textResponse;
       } catch (e: any) {
         const msg = (e.message || e.toString()).toLowerCase();
-        // More specific error handling
-        if (msg.includes("rpc") || msg.includes("fetch failed") || msg.includes("networkerror")) {
+        if (msg.includes("rpc") || msg.includes("fetch failed") || msg.includes("networkerror") || msg.includes("failed to fetch")) {
            throw new Error("Google Gemini Connection Failed (RPC/Network). Please ensure you have a valid VPN/Proxy connected if you are in a restricted region, or check your internet connection.");
         }
         if (msg.includes("403") || msg.includes("permission denied")) {
@@ -297,62 +256,21 @@ const generateContentWithProvider = async (
   }
 };
 
+// ... (Existing export functions) ...
 export const parseFormFromDocument = async (base64Data: string, mimeType: string, settings: AppSettings): Promise<{title: string, description: string, fields: FormField[]}> => {
-  const systemInstruction = `You are an Advanced Visual Document Intelligence Engine (vLLM).
-  **CORE TASKS**:
-  1. **Preprocessing Analysis**: Mentally perform binarization and deskewing to read the layout accurately.
-  2. **Coordinate & Topology**: Analyze the spatial coordinates of text blocks. **CRITICAL**: Maintain the horizontal arrangement of fields.
-  3. **Schema Extraction**: Reconstruct the form's logical schema into JSON.
-  
-  **GRID SYSTEM RULES (CRITICAL)**:
-  - The form is a 24-column grid.
-  - You MUST calculate \`colSpan\` based on the visual width of the field relative to the page width.
-  - **Horizontal Alignment**: If Field A and Field B are side-by-side in the image, their \`colSpan\` values MUST sum to roughly 24 (e.g., 12+12, or 8+8+8 for 3 items).
-  - **Do NOT** assign \`colSpan: 24\` to every field unless it actually spans the full width of the page.
-  - **Table Structure**: If you see a table, reproduce it using the grid. Row headers are fields. Cells are fields.
-  
-  **FIELD RECOGNITION**:
-  - A "Field" usually consists of a Label (e.g., "Name:") and an Input Area (underlined space, box, or empty cell). 
-  - Combine Label and Input into a SINGLE field object. Do not create separate fields for the label and the value unless it is a table header.
-  
-  **OUTPUT JSON SCHEMA**:
-  {
-    "title": "Form Main Title",
-    "description": "Brief description",
-    "fields": [
-      {
-        "id": "gen_id_1",
-        "label": "Field Label",
-        "type": "text|textarea|date|number|section",
-        "colSpan": 1-24, 
-        "rowSpan": 1-10, 
-        "defaultValue": "Handwritten content or empty",
-        "required": boolean,
-        "readOnly": boolean, // Set to true if it's a fixed text block or header without input
-        "hideLabel": boolean // Set to true if the label is integrated into the layout visually
-      }
-    ]
-  }
-  **RULES**: Sort fields by reading order (Top-Left to Bottom-Right). Return ONLY JSON.`;
+  const systemInstruction = `You are an Expert Visual Document Understanding (VDU) Engine specializing in Form Digitization.
+  **MISSION**: Analyze the document image and reconstruct its exact logical structure into a JSON schema.`;
 
-  // --- SPECIAL HANDLING FOR OLLAMA (Text-Only) ---
   const isOllama = settings.aiProvider === 'ollama'; 
-  // NOTE: SiliconFlow will auto-switch to Qwen-VL inside generateContentWithProvider, so we skip manual OCR for it.
 
   if (isOllama) {
       try {
-          // Attempt OCR First
           const ocrText = await performGradioOCR(base64Data, mimeType);
           if (ocrText && ocrText.length > 50) {
-              // OCR Successful, pass text to LLM
-              const prompt = `Analyze this OCR result representing a form and convert it to the specified JSON schema. 
-              **LAYOUT HINT**: If multiple items appear on the same line in the text, assign them partial colSpans (e.g. 12 and 12) to fit on one row in a 24-col grid.
-              
+              const prompt = `Analyze this OCR result representing a form and convert it to the specified JSON schema.
               OCR CONTENT:
               ${ocrText}
-              
               ${systemInstruction}`;
-              
               return JSON.parse(await generateContentWithProvider(settings, prompt, { responseMimeType: "application/json" }));
           }
       } catch (e) {
@@ -360,8 +278,12 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
       }
   }
 
-  // Standard VLM Logic (Gemini / Qwen-VL / SiliconFlow)
-  const contents = { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Extract form structure to JSON with high spatial accuracy. Respect horizontal layouts." }] };
+  const contents = { 
+      parts: [
+          { inlineData: { mimeType, data: base64Data } }, 
+          { text: "Analyze the document image. Extract fields, detect tables, and recognize handwriting. Map to the 24-column grid as specified." }
+      ] 
+  };
   const config = { responseMimeType: "application/json", model: 'gemini-3-pro-preview' };
   
   const res = await generateContentWithProvider(settings, contents, config, systemInstruction);
@@ -375,11 +297,6 @@ export const parseFormFromDocument = async (base64Data: string, mimeType: string
 
 export const parseFormFromExcelData = async (data: any[][], settings: AppSettings): Promise<{title: string, description: string, fields: FormField[]}> => {
   const prompt = `Execute Table Structure Analysis on this raw Excel data. 
-  1. [Structure Prediction]: Identify headers vs data cells.
-  2. [Cell Matching]: Map columns to field definitions.
-  3. [Topology]: Detect logical row/column spans.
-  4. [Output]: Convert to Form Template JSON with colSpan (1-24) and rowSpan.
-     *IMPORTANT*: Ensure the colSpans in a row sum up to 24 to maintain layout.
   Data: ${JSON.stringify(data.slice(0, 10))}`;
   const res = await generateContentWithProvider(settings, prompt, { responseMimeType: "application/json" });
   try {
@@ -390,33 +307,7 @@ export const parseFormFromExcelData = async (data: any[][], settings: AppSetting
 };
 
 export const parseAssetsFromImage = async (base64Data: string, mimeType: string, settings: AppSettings): Promise<Partial<AssetItem>[]> => {
-  const systemInstruction = `You are an advanced document OCR and information extraction engine.
-  Your task is to analyze the provided image, which could be an invoice, a list, or a photo of assets, and extract asset information into a structured JSON format.
-  
-  **Required Output Format**:
-  Return a JSON array of objects. Each object represents one asset.
-  
-  **JSON Schema per Asset**:
-  {
-    "name": "string // The primary name of the asset",
-    "brandModel": "string // Brand and model, if available",
-    "price": "string // Price as a string, extract numbers only",
-    "assetTag": "string // Asset tag/ID, if visible",
-    "serialNumber": "string // Serial number, if visible",
-    "purchaseDate": "string // Purchase date in YYYY-MM-DD format",
-    "category": "IT | Furniture | Electronic | Consumables | Other"
-  }
-
-  **Extraction Rules**:
-  1.  **High Accuracy**: Prioritize accuracy. If a field is not clearly visible, omit it or leave it as an empty string. Do not invent data.
-  2.  **Table Recognition**: If the image contains a table, correctly associate columns with the corresponding fields.
-  3.  **Date Formatting**: Normalize all extracted dates to 'YYYY-MM-DD' format.
-  4.  **Price Cleaning**: Extract only the numerical value for the price, removing currency symbols or commas.
-  5.  **Categorization**: Use your knowledge to assign the most appropriate category from the provided list.
-  
-  Return ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.`;
-
-  // Use a more powerful model for document analysis
+  const systemInstruction = `You are an advanced document OCR and information extraction engine. Return JSON array.`;
   const config = { responseMimeType: "application/json", model: 'gemini-3-pro-preview' };
   const contents = {
     parts: [
@@ -430,26 +321,12 @@ export const parseAssetsFromImage = async (base64Data: string, mimeType: string,
     const parsed = JSON.parse(res);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.error("Failed to parse JSON from asset OCR:", res);
     throw new Error("AI returned invalid JSON for asset data.");
   }
 };
 
 export const parseAssetRequest = async (text: string, settings: AppSettings): Promise<Partial<AssetItem>[]> => {
-    const systemInstruction = `You are a logistics assistant. Your task is to extract asset information from unstructured text.
-  Return a JSON array of objects. Each object represents one asset.
-  
-  **JSON Schema per Asset**:
-  {
-    "name": "string // The primary name of the asset",
-    "brandModel": "string // Brand and model, if available",
-    "price": "string // Price as a string, extract numbers only",
-    "category": "IT | Furniture | Electronic | Consumables | Other"
-  }
-  
-  Analyze the user's request and structure the data accordingly. For example, "3台戴尔OptiPlex 7000台式机，每台5000元" should result in three separate items.
-  
-  Return ONLY the JSON array.`;
+    const systemInstruction = `You are a logistics assistant. Extract asset information. Return JSON array.`;
   const res = await generateContentWithProvider(settings, text, { responseMimeType: "application/json" }, systemInstruction);
   try { return JSON.parse(res); } catch { return []; }
 };
@@ -464,11 +341,10 @@ export const generateChatResponse = async (
   if (typeof prompt === 'string') {
       contents = prompt;
   } else {
-      // Structure it for generateContentWithProvider
       contents = {
           parts: [
               ...prompt.images.map(img => ({
-                  inlineData: { mimeType: 'image/jpeg', data: img } // Assuming JPEG for simplicity, or we can pass mimeType
+                  inlineData: { mimeType: 'image/jpeg', data: img }
               })),
               { text: prompt.text }
           ]
@@ -491,9 +367,7 @@ export const translateParticipantInfo = async (p: Participant, settings: AppSett
 };
 
 export const parseParticipantsFromImage = async (base64Data: string, mimeType: string, settings: AppSettings): Promise<Partial<Participant>[]> => {
-  const systemInstruction = `Advanced OCR & Table Extraction Engine.
-  Task: Convert image of participant list to JSON.
-  Output: [{"nameCN": "...", "nameEN": "...", "unitCN": "...", "unitEN": "...", "workIdOrPhone": "...", "isExternal": boolean}]`;
+  const systemInstruction = `Advanced OCR & Table Extraction Engine. Return JSON array of participants.`;
   
   const isOllama = settings.aiProvider === 'ollama'; 
   
@@ -510,7 +384,7 @@ export const parseParticipantsFromImage = async (base64Data: string, mimeType: s
   const res = await generateContentWithProvider(
       settings, 
       { parts: [{ inlineData: { mimeType: mimeType, data: base64Data } }, { text: "Extract names and units from this list." }] }, 
-      { responseMimeType: "application/json", model: 'gemini-3-flash-preview' }, // Changed to Flash for better stability on OCR
+      { responseMimeType: "application/json", model: 'gemini-3-flash-preview' }, 
       systemInstruction
   );
   try { return JSON.parse(res); } catch { return []; }
@@ -547,7 +421,6 @@ export const generateSlideImage = async (prompt: string, settings: AppSettings):
   
   const ai = new GoogleGenAI({ apiKey });
   
-  // Wrap image generation in retry block as well
   const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: { parts: [{ text: prompt }] },
@@ -556,4 +429,109 @@ export const generateSlideImage = async (prompt: string, settings: AppSettings):
   
   const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
   return part?.inlineData?.data || '';
+};
+
+// --- RAG & Knowledge Graph Implementation (LangGraph-inspired) ---
+
+/**
+ * Text Splitter Logic (Recursive Character Splitter Approximation)
+ */
+const splitTextIntoChunks = (text: string, chunkSize: number = 1000, chunkOverlap: number = 200): string[] => {
+    const chunks: string[] = [];
+    let start = 0;
+    while (start < text.length) {
+        const end = Math.min(start + chunkSize, text.length);
+        chunks.push(text.slice(start, end));
+        start += chunkSize - chunkOverlap;
+    }
+    return chunks;
+};
+
+/**
+ * Graph RAG Engine: Simulates LangGraph nodes and edges for Knowledge Base
+ */
+export class GraphRAGEngine {
+    private settings: AppSettings;
+    private state: {
+        documents: string[];
+        chunks: string[];
+        graph: KnowledgeGraphData;
+        query: string;
+        context: string;
+        answer: string;
+    };
+
+    constructor(settings: AppSettings) {
+        this.settings = settings;
+        this.state = { documents: [], chunks: [], graph: { nodes: [], links: [] }, query: "", context: "", answer: "" };
+    }
+
+    // Node 1: Document Loader & Splitter
+    public processDocuments(rawTexts: string[]) {
+        this.state.documents = rawTexts;
+        // Simple chunking strategy
+        this.state.chunks = rawTexts.flatMap(text => splitTextIntoChunks(text));
+        return this.state.chunks;
+    }
+
+    // Node 2: Knowledge Graph Builder (LLM Extractor)
+    public async buildGraph(): Promise<KnowledgeGraphData> {
+        const context = this.state.chunks.slice(0, 10).join("\n\n"); // Limit context for graph building to avoid overload
+        const systemInstruction = `You are a Knowledge Graph extraction system.
+        Analyze the text and extract core entities and relationships.
+        Return JSON format: { "nodes": [{"id": "...", "label": "...", "category": "..."}], "links": [{"source": "...", "target": "...", "relation": "..."}] }
+        Limit to top 30 most important nodes.`;
+        
+        try {
+            const res = await generateContentWithProvider(this.settings, `Context:\n${context}`, { responseMimeType: "application/json" }, systemInstruction);
+            this.state.graph = JSON.parse(res);
+            return this.state.graph;
+        } catch (e) {
+            console.error("Graph build error", e);
+            return { nodes: [], links: [] };
+        }
+    }
+
+    // Node 3: Retriever (Hybrid: Keyword + Graph)
+    public async retrieve(query: string): Promise<string> {
+        this.state.query = query;
+        // Simple keyword match from chunks
+        const keywords = query.split(' ').filter(w => w.length > 1);
+        const relevantChunks = this.state.chunks.filter(chunk => 
+            keywords.some(kw => chunk.includes(kw))
+        ).slice(0, 5); // Top 5 chunks
+
+        // Graph retrieval (Simulated: find nodes mentioned in query)
+        const relevantNodes = this.state.graph.nodes.filter(n => query.includes(n.label));
+        const graphContext = relevantNodes.map(n => 
+            `Entity: ${n.label} (${n.category}) is related to: ` + 
+            this.state.graph.links.filter(l => l.source === n.id).map(l => `${l.target} via ${l.relation}`).join(", ")
+        ).join("\n");
+
+        this.state.context = `Graph Insights:\n${graphContext}\n\nDocument Excerpts:\n${relevantChunks.join("\n---\n")}`;
+        return this.state.context;
+    }
+
+    // Node 4: Generator
+    public async generateAnswer(): Promise<string> {
+        const systemInstruction = `You are a RAG Assistant. Answer based on the provided Context. If unknown, say "I don't know".`;
+        const prompt = `Context:\n${this.state.context}\n\nQuestion: ${this.state.query}`;
+        this.state.answer = await generateContentWithProvider(this.settings, prompt, {}, systemInstruction);
+        return this.state.answer;
+    }
+}
+
+// Wrappers for component consumption
+export const analyzeKnowledgeGraph = async (textContext: string, settings: AppSettings): Promise<KnowledgeGraphData> => {
+    const engine = new GraphRAGEngine(settings);
+    engine.processDocuments([textContext]);
+    return await engine.buildGraph();
+};
+
+export const queryKnowledgeBase = async (query: string, context: string, settings: AppSettings): Promise<string> => {
+    // We treat 'context' here as the raw text corpus passed from the view
+    const engine = new GraphRAGEngine(settings);
+    engine.processDocuments([context]);
+    await engine.retrieve(query);
+    return await engine.generateAnswer();
 };

@@ -208,12 +208,43 @@ export interface FormSubmission {
   history: { status: string; time: number; note: string }[];
 }
 
+// Knowledge Base Types
+export interface KnowledgeNode {
+  id: string;
+  label: string;
+  category: string; // 'Concept', 'Person', 'Location', 'Event', 'Document'
+  val: number; // importance for visual size
+  color?: string;
+}
+
+export interface KnowledgeLink {
+  source: string;
+  target: string;
+  relation: string;
+}
+
+export interface KnowledgeGraphData {
+  nodes: KnowledgeNode[];
+  links: KnowledgeLink[];
+}
+
+export interface KnowledgeFile {
+  id: string;
+  name: string;
+  type: 'pdf' | 'word' | 'image' | 'text';
+  content: string; // Extracted full text
+  tokenCount?: number;
+  uploadDate: number;
+  status: 'processing' | 'ready' | 'error';
+}
+
 export enum View {
   HOME = 'HOME', 
   DAILY_SCHEDULE = 'DAILY_SCHEDULE',
   PROJECT_MANAGER = 'PROJECT_MANAGER',
   ASSET_MANAGER = 'ASSET_MANAGER', 
   FORMS = 'FORMS', 
+  KNOWLEDGE_BASE = 'KNOWLEDGE_BASE', // New View
   MEETING_LIST = 'MEETING_LIST',
   DASHBOARD = 'DASHBOARD',
   ASSISTANT = 'ASSISTANT', 

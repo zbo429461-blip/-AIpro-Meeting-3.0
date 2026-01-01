@@ -43,11 +43,11 @@ export const FormsView: React.FC<FormsViewProps> = ({ settings }) => {
 
   // Advanced OCR Steps Configuration
   const scanSteps = [
-      { id: 0, label: "图像预处理 (二值化/去噪/倾斜校正)", icon: RotateCw, type: 'preprocessing' },
-      { id: 1, label: "视觉特征提取 (CNN/vLLM 视觉模型)", icon: Layers, type: 'feature_extraction' },
-      { id: 2, label: "字符分类识别 (SVM/DeepLearning)", icon: BrainCircuit, type: 'classification' },
-      { id: 3, label: "全局上下文分析 (Self-Attention)", icon: Network, type: 'attention' },
-      { id: 4, label: "结构化后处理 (规则引擎/LLM纠错)", icon: Zap, type: 'post_processing' },
+      { id: 0, label: "图像预处理 (去噪/倾斜校正/二值化)", icon: RotateCw, type: 'preprocessing' },
+      { id: 1, label: "高精度边界探测 (Canny/Hough)", icon: Crop, type: 'boundary_detection' },
+      { id: 2, label: "手写体/印刷体分离识别 (HTR+OCR)", icon: Layers, type: 'ocr' },
+      { id: 3, label: "复杂表格拓扑结构分析", icon: IconTable, type: 'table_topology' },
+      { id: 4, label: "语义实体映射 (Key-Value Alignment)", icon: Network, type: 'semantic_mapping' },
       { id: 5, label: "生成高保真电子表单", icon: FileJson, type: 'finalizing' }
   ];
 
@@ -89,13 +89,9 @@ export const FormsView: React.FC<FormsViewProps> = ({ settings }) => {
       // Simulate detailed OCR progression steps
       if (mobileStepTimerRef.current) clearInterval(mobileStepTimerRef.current);
       
-      // Step 0: Preprocessing (0-1500ms)
-      // Step 1: CNN (1500-3000ms)
-      // Step 2: Classification (3000-4500ms)
-      
       let currentSimStep = 0;
       mobileStepTimerRef.current = window.setInterval(() => {
-          if (currentSimStep < 3) {
+          if (currentSimStep < 4) {
               currentSimStep++;
               setScanStep(currentSimStep);
           }
@@ -129,13 +125,10 @@ export const FormsView: React.FC<FormsViewProps> = ({ settings }) => {
                       const base64 = (reader.result as string).split(',')[1];
                       
                       // Wait for simulation steps to progress a bit
-                      await new Promise(r => setTimeout(r, 4500)); 
+                      await new Promise(r => setTimeout(r, 6000)); 
                       if (mobileStepTimerRef.current) clearInterval(mobileStepTimerRef.current);
                       
-                      setScanStep(3); // Attention
-                      await new Promise(r => setTimeout(r, 1500));
-                      
-                      setScanStep(4); // Post-processing
+                      setScanStep(4); // Semantic mapping
                       
                       // Timeout race
                       const timeoutPromise = new Promise((_, reject) => 
@@ -401,9 +394,11 @@ export const FormsView: React.FC<FormsViewProps> = ({ settings }) => {
                     <Loader2 size={64} className="animate-spin text-indigo-500 relative z-10"/>
                 </div>
                 <h2 className="text-2xl font-bold mb-2">正在进行 AI 结构化分析</h2>
-                <p className="text-slate-400 mb-8 font-mono text-sm">正在解析布局、字段与逻辑关系...</p>
+                <div className="text-center mb-8 text-indigo-300 font-mono text-sm">
+                    {scanSteps.find(s => s.id === scanStep)?.label || "正在处理..."}
+                </div>
                 <div className="w-64 h-1 bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 animate-progress"></div>
+                    <div className="h-full bg-indigo-500 animate-progress" style={{ width: `${(scanStep + 1) * 20}%` }}></div>
                 </div>
                 <button onClick={cancelScanning} className="mt-8 text-sm text-gray-500 hover:text-white underline">取消任务</button>
             </div>

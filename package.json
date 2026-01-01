@@ -18,7 +18,10 @@
     "file-saver": "2.0.5",
     "pptxgenjs": "3.12.0",
     "docx": "8.5.0",
-    "@gradio/client": "0.14.0"
+    "@gradio/client": "0.14.0",
+    "xlsx": "^0.18.5",
+    "mammoth": "1.6.0",
+    "pdfjs-dist": "^5.4.530"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -6,8 +6,9 @@ import {
   Sparkles, Loader2, QrCode, 
   ShieldCheck, Wrench, Clock, TrendingUp, AlertTriangle, 
   ArrowUpDown, ArrowUp, ArrowDown, Copy, ListFilter, ScanLine, 
-  Sheet, History, MapPin, ArrowRightLeft
+  Sheet, History, MapPin, ArrowRightLeft, Check, AlertCircle, RefreshCcw
 } from 'lucide-react';
+import { utils, writeFile } from 'xlsx';
 import { parseAssetRequest, parseAssetsFromImage, getAIProviderLabel } from '../services/aiService';
 
 interface AssetManagerViewProps {
@@ -35,6 +36,11 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
   const [aiText, setAiText] = useState('');
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiModalTab, setAiModalTab] = useState<'text' | 'ocr'>('text');
+  
+  // AI Preview & Validation State
+  const [aiStep, setAiStep] = useState<'input' | 'review'>('input');
+  const [previewAssets, setPreviewAssets] = useState<AssetItem[]>([]);
+
   const [showLabelModal, setShowLabelModal] = useState<AssetItem | null>(null);
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -241,13 +247,43 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
     setAssets(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
   
+  // Update item in preview list
+  const updatePreviewAsset = (index: number, field: keyof AssetItem, value: any) => {
+      const updated = [...previewAssets];
+      updated[index] = { ...updated[index], [field]: value };
+      setPreviewAssets(updated);
+  };
+
+  // Remove item from preview list
+  const removePreviewAsset = (index: number) => {
+      setPreviewAssets(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Validate and Confirm Import
+  const handleConfirmImport = () => {
+      if (previewAssets.length === 0) return;
+      
+      const newAssets = previewAssets.map(p => ({
+          ...p,
+          id: Date.now().toString() + Math.random().toString().slice(2,5), // Ensure unique IDs
+          sheet: activeSheet, // Assign current sheet
+          logs: [{ id: Date.now().toString(), type: 'Update' as const, date: new Date().toLocaleDateString(), operator: 'AI-Audit', notes: '经用户校验后确认入库' }]
+      }));
+
+      setAssets(prev => [...newAssets, ...prev]);
+      setShowAiModal(false);
+      setPreviewAssets([]);
+      setAiStep('input');
+      setAiText('');
+  };
+
   const handleAiQuickAdd = async () => {
       if (!aiText.trim() || !settings) return;
       setIsAiLoading(true);
       try {
           const parsed = await parseAssetRequest(aiText, settings);
           const newItems: AssetItem[] = parsed.map((p, idx) => ({
-              id: (Date.now() + idx).toString(),
+              id: (Date.now() + idx).toString(), // Temporary ID
               name: p.name || 'AI识别资产',
               brandModel: p.brandModel || '',
               price: p.price || '0',
@@ -257,11 +293,10 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
               category: p.category || 'Other',
               purchaseDate: new Date().toISOString().split('T')[0],
               sheet: activeSheet,
-              logs: [{ id: (Date.now() + idx).toString(), type: 'Update', date: new Date().toLocaleDateString(), operator: 'AI助手', notes: '智能识别入库' }]
+              logs: []
           }));
-          setAssets([...newItems, ...assets]);
-          setShowAiModal(false);
-          setAiText('');
+          setPreviewAssets(newItems);
+          setAiStep('review');
       } catch (e) { alert("AI 解析失败"); } finally { setIsAiLoading(false); }
   };
   
@@ -276,7 +311,7 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
               const base64Data = (reader.result as string).split(',')[1];
               const parsed = await parseAssetsFromImage(base64Data, file.type, settings);
               const newItems: AssetItem[] = parsed.map((p, idx) => ({
-                  id: (Date.now() + idx).toString(),
+                  id: (Date.now() + idx).toString(), // Temporary ID
                   name: p.name || 'OCR识别资产',
                   brandModel: p.brandModel || '',
                   price: p.price || '0',
@@ -287,10 +322,10 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
                   status: 'idle',
                   category: p.category || 'Other',
                   sheet: activeSheet,
-                  logs: [{ id: (Date.now() + idx).toString(), type: 'Update', date: new Date().toLocaleDateString(), operator: 'AI-OCR', notes: `从文件 ${file.name} 扫描入库` }]
+                  logs: []
               }));
-              setAssets([...newItems, ...assets]);
-              setShowAiModal(false);
+              setPreviewAssets(newItems);
+              setAiStep('review');
           } catch(err) {
               alert(`OCR 识别失败: ${err}`);
           } finally {
@@ -367,6 +402,10 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
       return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="text-indigo-600" /> : <ArrowDown size={12} className="text-indigo-600" />;
   };
 
+  // Helper validation for review step
+  const isValidDate = (dateStr: string) => !isNaN(Date.parse(dateStr));
+  const isValidPrice = (priceStr: string) => !isNaN(parseFloat(priceStr)) && parseFloat(priceStr) >= 0;
+
   return (
     <div className="h-full flex flex-col bg-[#f0f2f5] overflow-hidden font-sans relative">
       <header className="bg-white border-b h-20 flex items-center justify-between px-8 shrink-0 shadow-sm z-30">
@@ -386,7 +425,7 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
                     <input type="text" placeholder="快速检索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 bg-slate-100 border-none rounded-xl text-xs w-64 focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-inner" />
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"/>
                 </div>
-                <button onClick={() => setShowAiModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 text-[11px] font-black uppercase border border-indigo-100 transition-all">
+                <button onClick={() => { setShowAiModal(true); setAiStep('input'); setPreviewAssets([]); }} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 text-[11px] font-black uppercase border border-indigo-100 transition-all">
                     <Sparkles size={16}/> AI 录入
                 </button>
                 <button onClick={handleAddRow} className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl hover:bg-black text-[11px] font-black shadow-lg transition-all active:scale-95">
@@ -643,34 +682,122 @@ export const AssetManagerView: React.FC<AssetManagerViewProps> = ({ onBack, sett
 
        {showAiModal && (
             <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-white/20 animate-slideUp">
-                    <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden border border-white/20 animate-slideUp flex flex-col max-h-[90vh]">
+                    <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                          <h3 className="text-lg font-bold flex items-center gap-3"><Sparkles/> AI 智能录入</h3>
                          <button onClick={() => setShowAiModal(false)} className="text-white/60 hover:text-white"><X/></button>
                     </div>
-                    <div className="flex border-b">
-                         <button onClick={() => setAiModalTab('text')} className={`flex-1 py-3 text-sm font-medium ${aiModalTab === 'text' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>文本快速录入</button>
-                         <button onClick={() => setAiModalTab('ocr')} className={`flex-1 py-3 text-sm font-medium ${aiModalTab === 'ocr' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>单据/图片扫描 (OCR)</button>
-                    </div>
-                    <div className="p-8">
-                        {aiModalTab === 'text' ? (
-                            <div>
-                                <textarea value={aiText} onChange={e => setAiText(e.target.value)} placeholder="粘贴文本，例如：3台戴尔显示器U2723QE，每台4000元，IT类" className="w-full h-40 p-4 bg-slate-50 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm"/>
-                                <button onClick={handleAiQuickAdd} disabled={!aiText.trim() || isAiLoading} className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-                                    {isAiLoading ? <Loader2 className="animate-spin"/> : 'AI 识别并添加'}
+                    
+                    {aiStep === 'input' && (
+                        <>
+                            <div className="flex border-b shrink-0">
+                                <button onClick={() => setAiModalTab('text')} className={`flex-1 py-3 text-sm font-medium ${aiModalTab === 'text' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>文本快速录入</button>
+                                <button onClick={() => setAiModalTab('ocr')} className={`flex-1 py-3 text-sm font-medium ${aiModalTab === 'ocr' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>单据/图片扫描 (OCR)</button>
+                            </div>
+                            <div className="p-8 flex-1 overflow-y-auto">
+                                {aiModalTab === 'text' ? (
+                                    <div>
+                                        <textarea value={aiText} onChange={e => setAiText(e.target.value)} placeholder="粘贴文本，例如：3台戴尔显示器U2723QE，每台4000元，IT类" className="w-full h-40 p-4 bg-slate-50 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm"/>
+                                        <button onClick={handleAiQuickAdd} disabled={!aiText.trim() || isAiLoading} className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                                            {isAiLoading ? <Loader2 className="animate-spin"/> : 'AI 识别并解析'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="text-center">
+                                        <p className="text-sm text-slate-500 mb-4">上传资产清单、发票或设备照片进行自动识别</p>
+                                        <button onClick={() => ocrFileInputRef.current?.click()} disabled={isAiLoading} className="w-full py-12 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                            {isAiLoading ? <Loader2 className="animate-spin text-indigo-600" size={32}/> : <><ScanLine size={32} className="text-slate-400 mb-2"/><span className="font-bold text-slate-700">点击上传文件</span></>}
+                                        </button>
+                                        <input type="file" ref={ocrFileInputRef} onChange={handleOcrUpload} className="hidden" accept="image/*,.pdf"/>
+                                    </div>
+                                )}
+                                <p className="text-center text-xs text-slate-400 mt-4 font-mono">Powered by {getAIProviderLabel(settings || {} as AppSettings)}</p>
+                            </div>
+                        </>
+                    )}
+
+                    {aiStep === 'review' && (
+                        <>
+                            <div className="p-4 bg-orange-50 border-b border-orange-100 flex items-center gap-2 text-xs text-orange-800 font-medium shrink-0">
+                                <AlertCircle size={16}/> 
+                                请校验 AI 识别结果，确认无误后点击“确认入库”。红色边框表示可能需要检查的字段。
+                            </div>
+                            <div className="flex-1 overflow-auto p-0">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                                        <tr className="text-xs font-bold text-slate-500">
+                                            <th className="p-3 w-12"></th>
+                                            <th className="p-3">名称</th>
+                                            <th className="p-3 w-32">品牌型号</th>
+                                            <th className="p-3 w-24">价格</th>
+                                            <th className="p-3 w-32">日期</th>
+                                            <th className="p-3 w-24">分类</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {previewAssets.map((item, idx) => (
+                                            <tr key={idx} className="group hover:bg-slate-50">
+                                                <td className="p-2 text-center">
+                                                    <button onClick={() => removePreviewAsset(idx)} className="text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
+                                                </td>
+                                                <td className="p-2">
+                                                    <input 
+                                                        value={item.name} 
+                                                        onChange={e => updatePreviewAsset(idx, 'name', e.target.value)}
+                                                        className={`w-full p-1.5 border rounded text-xs focus:ring-1 focus:ring-indigo-500 outline-none ${!item.name ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                                                        placeholder="必填名称"
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                    <input 
+                                                        value={item.brandModel} 
+                                                        onChange={e => updatePreviewAsset(idx, 'brandModel', e.target.value)}
+                                                        className="w-full p-1.5 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                    <input 
+                                                        value={item.price} 
+                                                        onChange={e => updatePreviewAsset(idx, 'price', e.target.value)}
+                                                        className={`w-full p-1.5 border rounded text-xs focus:ring-1 focus:ring-indigo-500 outline-none ${!isValidPrice(item.price) ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                    <input 
+                                                        type="date"
+                                                        value={item.purchaseDate} 
+                                                        onChange={e => updatePreviewAsset(idx, 'purchaseDate', e.target.value)}
+                                                        className={`w-full p-1.5 border rounded text-xs focus:ring-1 focus:ring-indigo-500 outline-none ${!isValidDate(item.purchaseDate) ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                    <select 
+                                                        value={item.category} 
+                                                        onChange={e => updatePreviewAsset(idx, 'category', e.target.value)}
+                                                        className="w-full p-1.5 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                    >
+                                                        <option value="IT">IT硬件</option>
+                                                        <option value="Electronic">办公电器</option>
+                                                        <option value="Furniture">办公家具</option>
+                                                        <option value="Other">其他</option>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {previewAssets.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">暂无识别数据</div>}
+                            </div>
+                            <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0 bg-white">
+                                <button onClick={() => setAiStep('input')} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-lg font-bold hover:bg-slate-200 flex items-center justify-center gap-2">
+                                    <RefreshCcw size={16}/> 重新识别
+                                </button>
+                                <button onClick={handleConfirmImport} disabled={previewAssets.length === 0} className="flex-[2] py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 disabled:opacity-50">
+                                    <Check size={16}/> 确认入库 ({previewAssets.length})
                                 </button>
                             </div>
-                        ) : (
-                            <div className="text-center">
-                                <p className="text-sm text-slate-500 mb-4">上传资产清单、发票或设备照片进行自动识别</p>
-                                <button onClick={() => ocrFileInputRef.current?.click()} disabled={isAiLoading} className="w-full py-12 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
-                                    {isAiLoading ? <Loader2 className="animate-spin text-indigo-600" size={32}/> : <><ScanLine size={32} className="text-slate-400 mb-2"/><span className="font-bold text-slate-700">点击上传文件</span></>}
-                                </button>
-                                <input type="file" ref={ocrFileInputRef} onChange={handleOcrUpload} className="hidden" accept="image/*,.pdf"/>
-                            </div>
-                        )}
-                         <p className="text-center text-xs text-slate-400 mt-4 font-mono">Powered by {getAIProviderLabel(settings || {} as AppSettings)}</p>
-                    </div>
+                        </>
+                    )}
                 </div>
             </div>
         )}
